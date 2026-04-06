@@ -76,7 +76,7 @@ export default function Layout() {
                 <li><Link to="/" className="hover:text-accent transition-colors">Home</Link></li>
                 <li><Link to="/sermons" className="hover:text-accent transition-colors">Sermons</Link></li>
                 <li><Link to="/contact" className="hover:text-accent transition-colors">Contact Us</Link></li>
-                <li><Link to="/#upcoming-events" className="hover:text-accent transition-colors">Upcoming Events</Link></li>
+                <li><Link to={{ pathname: '/', hash: '#upcoming-events' }} className="hover:text-accent transition-colors">Upcoming Events</Link></li>
               </ul>
             </div>
 
@@ -85,7 +85,7 @@ export default function Layout() {
               <ul className="text-base sm:text-lg space-y-4 sm:space-y-6 font-light">
                 <li><Link to="/editorial" className="hover:text-accent transition-colors">Articles</Link></li>
                 <li><Link to="/devotionals" className="hover:text-accent transition-colors">Devotionals</Link></li>
-                <li><Link to="/#editorial" className="hover:text-accent transition-colors">Editorial Home</Link></li>
+                <li><Link to={{ pathname: '/', hash: '#editorial' }} className="hover:text-accent transition-colors">Editorial Home</Link></li>
               </ul>
             </div>
 
@@ -93,17 +93,17 @@ export default function Layout() {
               <h4 className="text-white font-bold mb-6 sm:mb-10 uppercase tracking-[0.3em] text-xs opacity-50">Gallery</h4>
               <ul className="text-base sm:text-lg space-y-4 sm:space-y-6 font-light">
                 <li><Link to="/gallery" className="hover:text-accent transition-colors">Full Gallery</Link></li>
-                <li><Link to="/#gallery" className="hover:text-accent transition-colors">Gallery Section</Link></li>
-                <li><Link to="/#support-giving" className="hover:text-accent transition-colors">Support & Giving</Link></li>
+                <li><Link to={{ pathname: '/', hash: '#gallery' }} className="hover:text-accent transition-colors">Gallery Section</Link></li>
+                <li><Link to={{ pathname: '/', hash: '#support-giving' }} className="hover:text-accent transition-colors">Support & Giving</Link></li>
               </ul>
             </div>
 
             <div>
               <h4 className="text-white font-bold mb-6 sm:mb-10 uppercase tracking-[0.3em] text-xs opacity-50">Support & Giving</h4>
               <ul className="text-base sm:text-lg space-y-4 sm:space-y-6 font-light break-words">
-                <li><Link to="/#prayer-request" className="hover:text-accent transition-colors">Prayer Request</Link></li>
-                <li><Link to="/#counseling" className="hover:text-accent transition-colors">Counseling</Link></li>
-                <li><Link to="/#giving" className="hover:text-accent transition-colors">Giving</Link></li>
+                <li><Link to={{ pathname: '/', hash: '#prayer-request' }} className="hover:text-accent transition-colors">Prayer Request</Link></li>
+                <li><Link to={{ pathname: '/', hash: '#counseling' }} className="hover:text-accent transition-colors">Counseling</Link></li>
+                <li><Link to={{ pathname: '/', hash: '#giving' }} className="hover:text-accent transition-colors">Giving</Link></li>
                 <li className="flex items-start gap-3 opacity-70 pt-2">
                   <MapPin className="w-5 h-5 shrink-0 mt-0.5 text-accent" />
                   <span>{address}</span>
@@ -163,8 +163,8 @@ export default function Layout() {
             <div className="flex flex-wrap justify-center gap-6 sm:gap-12">
               <Link to="/editorial" className="hover:text-white transition-colors">Editorial</Link>
               <Link to="/gallery" className="hover:text-white transition-colors">Gallery</Link>
-              <Link to="/#upcoming-events" className="hover:text-white transition-colors">Events</Link>
-              <Link to="/#support-giving" className="hover:text-white transition-colors">Support & Giving</Link>
+              <Link to={{ pathname: '/', hash: '#upcoming-events' }} className="hover:text-white transition-colors">Events</Link>
+              <Link to={{ pathname: '/', hash: '#support-giving' }} className="hover:text-white transition-colors">Support & Giving</Link>
             </div>
           </div>
         </div>

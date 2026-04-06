@@ -12,6 +12,14 @@ export default function Navbar() {
   const location = useLocation();
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
+  const getPathKey = (path: string | { pathname: string; hash?: string }) =>
+    typeof path === 'string' ? path : `${path.pathname}${path.hash || ''}`;
+
+  const isSamePath = (path: string | { pathname: string; hash?: string }) =>
+    typeof path === 'string'
+      ? location.pathname === path
+      : location.pathname === path.pathname && location.hash === path.hash;
+
   const navGroups = [
     { name: 'Home', path: '/' },
     { name: 'Sermons', path: '/sermons' },
@@ -25,22 +33,22 @@ export default function Navbar() {
     {
       name: 'Gallery',
       items: [
-        { name: 'Gallery Overview', path: '/#gallery' },
+        { name: 'Gallery Overview', path: { pathname: '/', hash: '#gallery' } },
         { name: 'Full Gallery', path: '/gallery' },
       ],
     },
     {
       name: 'Support & Giving',
       items: [
-        { name: 'Prayer Request', path: '/#prayer-request' },
-        { name: 'Counseling', path: '/#counseling' },
-        { name: 'Giving', path: '/#giving' },
+        { name: 'Prayer Request', path: { pathname: '/', hash: '#prayer-request' } },
+        { name: 'Counseling', path: { pathname: '/', hash: '#counseling' } },
+        { name: 'Giving', path: { pathname: '/', hash: '#giving' } },
       ],
     },
     {
       name: 'Upcoming Events',
       items: [
-        { name: 'View Events', path: '/#upcoming-events' },
+        { name: 'View Events', path: { pathname: '/', hash: '#upcoming-events' } },
       ],
     },
   ];
@@ -95,10 +103,10 @@ export default function Navbar() {
           <div className="hidden md:flex items-center gap-6 lg:gap-8">
             {navGroups.map((group) => {
               if ('path' in group) {
-                const isActive = location.pathname === group.path;
+                const isActive = isSamePath(group.path);
                 return (
                   <Link
-                    key={group.path}
+                    key={getPathKey(group.path)}
                     to={group.path}
                     className={`text-sm font-bold uppercase tracking-wider transition-colors hover:text-accent ${
                       isActive ? 'text-primary border-b-2 border-accent' : 'text-stone-600'
@@ -122,10 +130,10 @@ export default function Navbar() {
                     <div className="bg-white border border-stone-200 shadow-2xl min-w-56 p-2 rounded-none">
                       {group.items.map((item) => (
                         <Link
-                          key={item.path}
+                          key={getPathKey(item.path)}
                           to={item.path}
                           className={`block px-4 py-3 text-sm font-bold uppercase tracking-widest transition-colors hover:bg-stone-50 hover:text-primary ${
-                            location.pathname === item.path ? 'text-primary' : 'text-stone-600'
+                            isSamePath(item.path) ? 'text-primary' : 'text-stone-600'
                           }`}
                         >
                           {item.name}
@@ -207,7 +215,7 @@ export default function Navbar() {
                 if ('path' in group) {
                   return (
                     <Link
-                      key={group.path}
+                      key={getPathKey(group.path)}
                       to={group.path}
                       onClick={() => setIsOpen(false)}
                       className="block px-3 py-3 text-base font-bold text-stone-600 hover:text-accent hover:bg-stone-50 uppercase tracking-widest transition-all"
@@ -232,7 +240,7 @@ export default function Navbar() {
                       <div className="bg-stone-50">
                         {group.items.map((item) => (
                           <Link
-                            key={item.path}
+                            key={getPathKey(item.path)}
                             to={item.path}
                             onClick={() => setIsOpen(false)}
                             className="block px-5 py-3 text-sm font-bold text-stone-600 hover:text-primary hover:bg-white uppercase tracking-widest transition-all border-t border-stone-100"
