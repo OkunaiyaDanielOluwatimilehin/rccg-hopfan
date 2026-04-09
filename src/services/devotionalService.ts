@@ -8,6 +8,8 @@ export const getDailyDevotional = async (date: Date): Promise<Devotional | null>
       .from('devotionals')
       .select('*')
       .eq('devotional_date', dateStr)
+      .eq('status', 'published')
+      .lte('published_at', new Date().toISOString())
       .single();
 
     if (error) {

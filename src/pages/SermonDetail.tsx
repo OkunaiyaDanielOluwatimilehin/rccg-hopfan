@@ -480,7 +480,7 @@ export default function SermonDetail() {
       <Seo
         title={sermon ? `${sermon.title} | RCCG HOPFAN Sermons` : 'Sermons | RCCG HOPFAN'}
         description={sermon?.description || 'Listen to RCCG HOPFAN sermons and teachings.'}
-        image={sermon?.thumbnail_url || '/Rccg_logo.png'}
+        image={sermon?.thumbnail_url || 'https://images.unsplash.com/photo-1507692049790-de58290a4334?auto=format&fit=crop&q=80&w=1600'}
         path={sermon ? `/sermons/${sermon.id}` : '/sermons'}
         type="article"
       />

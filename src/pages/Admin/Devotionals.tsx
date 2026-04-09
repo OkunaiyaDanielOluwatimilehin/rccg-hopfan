@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BookOpen, Edit2, Loader2, Plus, Save, Search, Trash2, Image as ImageIcon } from 'lucide-react';
-import { motion } from 'motion/react';
+import { BookOpen, Edit2, Loader2, Plus, Save, Search, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
 import { Devotional } from '../../types';
@@ -11,6 +10,7 @@ const initialFormData = {
   author: '',
   date: new Date().toISOString().split('T')[0],
   published_at: new Date().toISOString().slice(0, 16),
+  status: 'published' as 'draft' | 'published',
   image_url: '',
   scripture_reference: '',
   content: '',
@@ -23,6 +23,8 @@ export default function AdminDevotionals() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDevotional, setEditingDevotional] = useState<Devotional | null>(null);
   const [saving, setSaving] = useState(false);
+  const [visibilityMode, setVisibilityMode] = useState<'published' | 'scheduled' | 'draft'>('published');
+  const [actionLoading, setActionLoading] = useState<'draft' | 'published' | 'scheduled' | null>(null);
   const [formData, setFormData] = useState(initialFormData);
 
   useEffect(() => {
@@ -35,6 +37,7 @@ export default function AdminDevotionals() {
       const { data, error } = await supabase
         .from('devotionals')
         .select('*')
+        .order('published_at', { ascending: false })
         .order('date', { ascending: false });
 
       if (error) throw error;
@@ -47,33 +50,48 @@ export default function AdminDevotionals() {
     }
   }
 
+  const normalizePublishedAt = (value?: string) => (value ? new Date(value).toISOString() : null);
+  const getDevotionalStatus = (devotional: Pick<Devotional, 'published_at' | 'status'>) => {
+    if (devotional.status === 'draft') return 'Draft';
+    return devotional.published_at && new Date(devotional.published_at) > new Date() ? 'Scheduled' : 'Published';
+  };
+
   const handleOpenModal = (devotional?: Devotional) => {
     if (devotional) {
       setEditingDevotional(devotional);
+      const effectiveDate = devotional.published_at;
       setFormData({
         title: devotional.title || '',
         author: devotional.author || '',
         date: devotional.date || new Date().toISOString().split('T')[0],
-        published_at: devotional.published_at ? new Date(devotional.published_at).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16),
+        published_at: effectiveDate ? new Date(effectiveDate).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16),
+        status: devotional.status || 'published',
         image_url: devotional.image_url || '',
         scripture_reference: devotional.scripture_reference || '',
         content: devotional.content || '',
       });
+      setVisibilityMode(devotional.status === 'draft' ? 'draft' : effectiveDate && new Date(effectiveDate) > new Date() ? 'scheduled' : 'published');
     } else {
       setEditingDevotional(null);
-      setFormData(initialFormData);
+      setFormData({ ...initialFormData, published_at: new Date().toISOString().slice(0, 16) });
+      setVisibilityMode('published');
     }
     setIsModalOpen(true);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const saveDevotional = async (modeOverride?: 'draft' | 'published' | 'scheduled') => {
     setSaving(true);
+    setActionLoading(modeOverride || visibilityMode);
     try {
+      const nowIso = new Date().toISOString();
+      const publishAt = normalizePublishedAt(formData.published_at);
+      const effectiveMode = modeOverride || visibilityMode;
+      const devotionalStatus = effectiveMode === 'draft' ? 'draft' : 'published';
       const payload = {
         ...formData,
-        published_at: formData.published_at ? new Date(formData.published_at).toISOString() : new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        published_at: devotionalStatus === 'draft' ? null : publishAt || nowIso,
+        status: devotionalStatus,
+        updated_at: nowIso,
       };
 
       if (editingDevotional) {
@@ -91,7 +109,13 @@ export default function AdminDevotionals() {
       alert('Failed to save devotional');
     } finally {
       setSaving(false);
+      setActionLoading(null);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await saveDevotional();
   };
 
   const handleDelete = async (id: string) => {
@@ -121,13 +145,24 @@ export default function AdminDevotionals() {
             </h1>
             <p className="text-stone-500 text-sm font-light">Create and manage devotionals for the website.</p>
           </div>
-          <button
-            type="button"
-            onClick={() => setIsModalOpen(false)}
-            className="px-6 py-3 border border-stone-200 bg-white text-stone-600 font-bold uppercase tracking-widest text-xs hover:bg-stone-50 transition-colors"
-          >
-            Back
-          </button>
+          <div className="flex items-center gap-3 flex-wrap justify-end">
+            <button
+              type="button"
+              onClick={() => saveDevotional('draft')}
+              disabled={saving}
+              className="px-5 py-3 border border-stone-200 bg-white text-stone-700 font-bold uppercase tracking-widest text-xs hover:bg-stone-50 transition-colors disabled:opacity-50 inline-flex items-center gap-2 rounded-xl"
+            >
+              {saving && actionLoading === 'draft' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Save Draft
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(false)}
+              className="px-6 py-3 border border-stone-200 bg-white text-stone-600 font-bold uppercase tracking-widest text-xs hover:bg-stone-50 transition-colors rounded-xl"
+            >
+              Back
+            </button>
+          </div>
         </div>
 
         <div className="bg-white rounded-[2.5rem] border border-stone-200 shadow-sm overflow-hidden">
@@ -179,6 +214,31 @@ export default function AdminDevotionals() {
                 </div>
               </div>
 
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Visibility</label>
+                <select
+                  value={visibilityMode}
+                  onChange={(e) => {
+                    const nextVisibility = e.target.value as 'published' | 'scheduled' | 'draft';
+                    setVisibilityMode(nextVisibility);
+                    if (nextVisibility === 'scheduled' && (!formData.published_at || new Date(formData.published_at) <= new Date())) {
+                      setFormData((prev) => ({
+                        ...prev,
+                        published_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
+                      }));
+                    }
+                  }}
+                  className="w-full px-6 py-4 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-accent transition-all"
+                >
+                  <option value="published">Published</option>
+                  <option value="scheduled">Scheduled</option>
+                  <option value="draft">Draft / Unpublished</option>
+                </select>
+                <p className="text-[11px] text-stone-400 leading-relaxed">
+                  Published devotionals appear on the site. Scheduled devotionals wait for the date above.
+                </p>
+              </div>
+
               <div className="grid md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Scripture Reference</label>
@@ -210,6 +270,7 @@ export default function AdminDevotionals() {
                 placeholder="Write the devotional content here..."
                 previewTitle={formData.title}
                 previewSubtitle={formData.scripture_reference || formData.author}
+                enableScriptureLookup
               />
 
               <div className="flex justify-end gap-4 pt-6">
@@ -225,7 +286,7 @@ export default function AdminDevotionals() {
                   disabled={saving}
                   className="bg-primary text-white px-10 py-4 rounded-xl font-bold flex items-center gap-3 hover:bg-primary/90 transition-all disabled:opacity-50 shadow-xl shadow-primary/20"
                 >
-                  {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                  {saving && actionLoading !== 'draft' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
                   {editingDevotional ? 'Update Devotional' : 'Create Devotional'}
                 </button>
               </div>
@@ -238,7 +299,7 @@ export default function AdminDevotionals() {
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-between items-end">
+      <div className="flex justify-between items-end gap-6 flex-wrap">
         <div className="space-y-2">
           <h1 className="text-3xl font-serif font-bold text-primary tracking-tight">Devotionals Management</h1>
           <p className="text-stone-500 text-sm font-light">Create and manage devotionals for the website.</p>
@@ -272,6 +333,7 @@ export default function AdminDevotionals() {
               <tr>
                 <th className="px-8 py-5">Title</th>
                 <th className="px-8 py-5">Date</th>
+                <th className="px-8 py-5">Status</th>
                 <th className="px-8 py-5">Published</th>
                 <th className="px-8 py-5 text-right">Actions</th>
               </tr>
@@ -282,6 +344,7 @@ export default function AdminDevotionals() {
                   <tr key={i} className="animate-pulse">
                     <td className="px-8 py-6"><div className="h-4 bg-stone-100 rounded w-48" /></td>
                     <td className="px-8 py-6"><div className="h-4 bg-stone-100 rounded w-24" /></td>
+                    <td className="px-8 py-6"><div className="h-4 bg-stone-100 rounded w-20" /></td>
                     <td className="px-8 py-6"><div className="h-4 bg-stone-100 rounded w-24" /></td>
                     <td className="px-8 py-6 text-right"><div className="h-4 bg-stone-100 rounded w-12 ml-auto" /></td>
                   </tr>
@@ -291,6 +354,17 @@ export default function AdminDevotionals() {
                   <td className="px-8 py-6 font-bold text-primary text-base tracking-tight">{dev.title}</td>
                   <td className="px-8 py-6 text-stone-500 font-medium">
                     {dev.date ? format(new Date(dev.date), 'MMM d, yyyy') : 'Not set'}
+                  </td>
+                  <td className="px-8 py-6">
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-sm ${
+                      getDevotionalStatus(dev) === 'Published'
+                        ? 'bg-accent text-white'
+                        : getDevotionalStatus(dev) === 'Scheduled'
+                          ? 'bg-stone-100 text-stone-600'
+                          : 'bg-rose-50 text-rose-700'
+                    }`}>
+                      {getDevotionalStatus(dev)}
+                    </span>
                   </td>
                   <td className="px-8 py-6 text-stone-500 font-medium">
                     {dev.published_at ? format(new Date(dev.published_at), 'MMM d, yyyy') : 'Not published'}

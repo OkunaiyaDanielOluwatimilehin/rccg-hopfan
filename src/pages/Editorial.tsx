@@ -56,10 +56,10 @@ export default function Editorial() {
             <div className="inline-block bg-accent/20 text-accent px-4 sm:px-6 py-2 text-xs sm:text-sm font-bold uppercase tracking-widest">
               Editorial
             </div>
-            <h1 className="text-4xl sm:text-6xl md:text-9xl font-serif font-bold leading-tight sm:leading-none tracking-tight">
+            <h1 className="text-3xl sm:text-5xl md:text-8xl font-serif font-bold leading-tight sm:leading-none tracking-tight">
               Articles <span className="text-accent italic">&amp;</span> Devotionals
             </h1>
-            <p className="text-base sm:text-xl md:text-2xl text-stone-300 font-light leading-relaxed max-w-2xl mx-auto">
+            <p className="text-sm sm:text-xl md:text-2xl text-stone-300 font-light leading-relaxed max-w-2xl mx-auto">
               Read our latest articles and reflect with daily devotionals in one place.
             </p>
           </motion.div>
@@ -74,7 +74,7 @@ export default function Editorial() {
               <Sparkles className="w-4 h-4" />
               Articles
             </div>
-            <h2 className="text-3xl sm:text-5xl font-serif font-bold text-primary">Latest Articles</h2>
+              <h2 className="text-3xl sm:text-4xl lg:text-5xl font-serif font-bold text-primary">Latest Articles</h2>
             <p className="text-stone-500 text-base sm:text-lg max-w-2xl">
               Church stories, reflections, and written encouragement from our ministry team.
             </p>
@@ -140,7 +140,7 @@ export default function Editorial() {
         <div className="max-w-6xl mx-auto space-y-6 sm:space-y-10">
           <div className="flex items-center gap-3">
             <Quote className="w-5 h-5 text-accent" />
-            <h2 className="text-3xl sm:text-5xl font-serif font-bold text-primary">Devotionals</h2>
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-serif font-bold text-primary">Devotionals</h2>
           </div>
           {devotionals.length === 0 ? (
             <p className="text-stone-400 italic">No devotionals available yet.</p>

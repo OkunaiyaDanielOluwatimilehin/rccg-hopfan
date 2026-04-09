@@ -9,6 +9,7 @@ const initialFormData = {
   description: '',
   event_date: new Date().toISOString().split('T')[0],
   published_at: new Date().toISOString().slice(0, 16),
+  status: 'published' as 'draft' | 'published',
   event_time: '',
   location: '',
   category: '',
@@ -22,6 +23,8 @@ export default function AdminEvents() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<ChurchEvent | null>(null);
   const [saving, setSaving] = useState(false);
+  const [visibilityMode, setVisibilityMode] = useState<'published' | 'scheduled' | 'draft'>('published');
+  const [actionLoading, setActionLoading] = useState<'draft' | 'published' | 'scheduled' | null>(null);
   const [formData, setFormData] = useState(initialFormData);
 
   useEffect(() => {
@@ -31,7 +34,7 @@ export default function AdminEvents() {
   async function fetchEvents() {
     setLoading(true);
     try {
-      const { data, error } = await supabase.from('events').select('*').order('event_date', { ascending: false });
+      const { data, error } = await supabase.from('events').select('*').order('published_at', { ascending: false }).order('event_date', { ascending: false });
       if (error) throw error;
       setEvents((data || []) as ChurchEvent[]);
     } catch (error) {
@@ -42,34 +45,49 @@ export default function AdminEvents() {
     }
   }
 
+  const normalizePublishedAt = (value?: string) => (value ? new Date(value).toISOString() : null);
+  const getEventStatus = (event: Pick<ChurchEvent, 'published_at' | 'status'>) => {
+    if (event.status === 'draft') return 'Draft';
+    return event.published_at && new Date(event.published_at) > new Date() ? 'Scheduled' : 'Published';
+  };
+
   const handleOpenModal = (event?: ChurchEvent) => {
     if (event) {
       setEditingEvent(event);
+      const effectiveDate = event.published_at;
       setFormData({
         title: event.title || '',
         description: event.description || '',
         event_date: event.event_date || new Date().toISOString().split('T')[0],
-        published_at: event.published_at ? new Date(event.published_at).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16),
+        published_at: effectiveDate ? new Date(effectiveDate).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16),
+        status: event.status || 'published',
         event_time: event.event_time || '',
         location: event.location || '',
         category: event.category || '',
         image_url: event.image_url || '',
       });
+      setVisibilityMode(event.status === 'draft' ? 'draft' : effectiveDate && new Date(effectiveDate) > new Date() ? 'scheduled' : 'published');
     } else {
       setEditingEvent(null);
-      setFormData(initialFormData);
+      setFormData({ ...initialFormData, published_at: new Date().toISOString().slice(0, 16) });
+      setVisibilityMode('published');
     }
     setIsModalOpen(true);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const saveEvent = async (modeOverride?: 'draft' | 'published' | 'scheduled') => {
     setSaving(true);
+    setActionLoading(modeOverride || visibilityMode);
     try {
+      const nowIso = new Date().toISOString();
+      const publishAt = normalizePublishedAt(formData.published_at);
+      const effectiveMode = modeOverride || visibilityMode;
+      const eventStatus = effectiveMode === 'draft' ? 'draft' : 'published';
       const payload = {
         ...formData,
-        published_at: formData.published_at ? new Date(formData.published_at).toISOString() : new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        published_at: eventStatus === 'draft' ? null : publishAt || nowIso,
+        status: eventStatus,
+        updated_at: nowIso,
       };
 
       if (editingEvent) {
@@ -87,7 +105,13 @@ export default function AdminEvents() {
       alert('Failed to save event');
     } finally {
       setSaving(false);
+      setActionLoading(null);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await saveEvent();
   };
 
   const handleDelete = async (id: string) => {
@@ -118,13 +142,24 @@ export default function AdminEvents() {
             </h1>
             <p className="text-stone-500 text-sm font-light">Create and manage events for the website.</p>
           </div>
-          <button
-            type="button"
-            onClick={() => setIsModalOpen(false)}
-            className="px-6 py-3 border border-stone-200 bg-white text-stone-600 font-bold uppercase tracking-widest text-xs hover:bg-stone-50 transition-colors"
-          >
-            Back
-          </button>
+          <div className="flex items-center gap-3 flex-wrap justify-end">
+            <button
+              type="button"
+              onClick={() => saveEvent('draft')}
+              disabled={saving}
+              className="px-5 py-3 border border-stone-200 bg-white text-stone-700 font-bold uppercase tracking-widest text-xs hover:bg-stone-50 transition-colors disabled:opacity-50 inline-flex items-center gap-2 rounded-xl"
+            >
+              {saving && actionLoading === 'draft' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Save Draft
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(false)}
+              className="px-6 py-3 border border-stone-200 bg-white text-stone-600 font-bold uppercase tracking-widest text-xs hover:bg-stone-50 transition-colors rounded-xl"
+            >
+              Back
+            </button>
+          </div>
         </div>
 
         <div className="bg-white rounded-[2.5rem] border border-stone-200 shadow-sm overflow-hidden">
@@ -174,6 +209,31 @@ export default function AdminEvents() {
                     className="w-full px-6 py-4 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-accent transition-all"
                   />
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Visibility</label>
+                <select
+                  value={visibilityMode}
+                  onChange={(e) => {
+                    const nextVisibility = e.target.value as 'published' | 'scheduled' | 'draft';
+                    setVisibilityMode(nextVisibility);
+                    if (nextVisibility === 'scheduled' && (!formData.published_at || new Date(formData.published_at) <= new Date())) {
+                      setFormData((prev) => ({
+                        ...prev,
+                        published_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
+                      }));
+                    }
+                  }}
+                  className="w-full px-6 py-4 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-accent transition-all"
+                >
+                  <option value="published">Published</option>
+                  <option value="scheduled">Scheduled</option>
+                  <option value="draft">Draft / Unpublished</option>
+                </select>
+                <p className="text-[11px] text-stone-400 leading-relaxed">
+                  Published events appear on the site. Scheduled events wait for the date above.
+                </p>
               </div>
 
               <div className="grid md:grid-cols-2 gap-6">
@@ -234,7 +294,7 @@ export default function AdminEvents() {
                   disabled={saving}
                   className="bg-primary text-white px-10 py-4 rounded-xl font-bold flex items-center gap-3 hover:bg-primary/90 transition-all disabled:opacity-50 shadow-xl shadow-primary/20"
                 >
-                  {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                  {saving && actionLoading !== 'draft' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
                   {editingEvent ? 'Update Event' : 'Create Event'}
                 </button>
               </div>
@@ -247,7 +307,7 @@ export default function AdminEvents() {
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-between items-end">
+      <div className="flex justify-between items-end gap-6 flex-wrap">
         <div className="space-y-2">
           <h1 className="text-3xl font-serif font-bold text-primary tracking-tight">Events Management</h1>
           <p className="text-stone-500 text-sm font-light">Create and manage church events for the website.</p>
@@ -281,6 +341,7 @@ export default function AdminEvents() {
               <tr>
                 <th className="px-8 py-5">Title</th>
                 <th className="px-8 py-5">Date</th>
+                <th className="px-8 py-5">Status</th>
                 <th className="px-8 py-5">Published</th>
                 <th className="px-8 py-5 text-right">Actions</th>
               </tr>
@@ -291,6 +352,7 @@ export default function AdminEvents() {
                   <tr key={i} className="animate-pulse">
                     <td className="px-8 py-6"><div className="h-4 bg-stone-100 rounded w-48" /></td>
                     <td className="px-8 py-6"><div className="h-4 bg-stone-100 rounded w-24" /></td>
+                    <td className="px-8 py-6"><div className="h-4 bg-stone-100 rounded w-20" /></td>
                     <td className="px-8 py-6"><div className="h-4 bg-stone-100 rounded w-24" /></td>
                     <td className="px-8 py-6 text-right"><div className="h-4 bg-stone-100 rounded w-12 ml-auto" /></td>
                   </tr>
@@ -300,6 +362,17 @@ export default function AdminEvents() {
                   <td className="px-8 py-6 font-bold text-primary text-base tracking-tight">{event.title}</td>
                   <td className="px-8 py-6 text-stone-500 font-medium">
                     {event.event_date ? format(new Date(event.event_date), 'MMM d, yyyy') : 'Not set'}
+                  </td>
+                  <td className="px-8 py-6">
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-sm ${
+                      getEventStatus(event) === 'Published'
+                        ? 'bg-accent text-white'
+                        : getEventStatus(event) === 'Scheduled'
+                          ? 'bg-stone-100 text-stone-600'
+                          : 'bg-rose-50 text-rose-700'
+                    }`}>
+                      {getEventStatus(event)}
+                    </span>
                   </td>
                   <td className="px-8 py-6 text-stone-500 font-medium">
                     {event.published_at ? format(new Date(event.published_at), 'MMM d, yyyy') : 'Not published'}

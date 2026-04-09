@@ -46,7 +46,7 @@ export default function Events() {
   }, []);
 
   const visibleEvents = useMemo(
-    () => events.filter((event) => !event.published_at || new Date(event.published_at) <= new Date()),
+    () => events.filter((event) => event.status !== 'draft' && (!event.published_at || new Date(event.published_at) <= new Date())),
     [events],
   );
 

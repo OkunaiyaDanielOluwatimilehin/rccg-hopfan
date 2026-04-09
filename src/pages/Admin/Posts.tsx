@@ -16,6 +16,20 @@ function slugify(input: string) {
     .replace(/^-+|-+$/g, '');
 }
 
+const initialFormData = {
+  title: '',
+  summary: '',
+  byline: '',
+  content: '',
+  slug: '',
+  image_url: '',
+  video_url: '',
+  category: '',
+  categoriesText: '',
+  status: 'published' as 'draft' | 'published',
+  published_at: new Date().toISOString().slice(0, 16),
+};
+
 export default function AdminPosts() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,24 +37,21 @@ export default function AdminPosts() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPost, setEditingPost] = useState<Post | null>(null);
   const [saving, setSaving] = useState(false);
-
-  const [formData, setFormData] = useState({
-    title: '',
-    summary: '',
-    byline: '',
-    content: '',
-    slug: '',
-    image_url: '',
-    video_url: '',
-    category: '',
-    categoriesText: '',
-    status: 'published' as 'draft' | 'published',
-    published_at: new Date().toISOString().slice(0, 16),
-  });
+  const [visibilityMode, setVisibilityMode] = useState<'published' | 'scheduled' | 'draft'>('published');
+  const [actionLoading, setActionLoading] = useState<'draft' | 'published' | 'scheduled' | null>(null);
+  const [formData, setFormData] = useState(initialFormData);
 
   useEffect(() => {
     fetchPosts();
   }, []);
+
+  const normalizePublishedAt = (value?: string) => (value ? new Date(value).toISOString() : null);
+  const getEffectivePostDate = (post: Pick<Post, 'published_at'>) => post.published_at;
+  const getPostStatus = (post: Pick<Post, 'published_at' | 'status'>) => {
+    if (post.status === 'draft') return 'Draft';
+    const publishedDate = getEffectivePostDate(post);
+    return publishedDate && new Date(publishedDate) > new Date() ? 'Scheduled' : 'Published';
+  };
 
   async function fetchPosts() {
     setLoading(true);
@@ -48,6 +59,7 @@ export default function AdminPosts() {
       const { data, error } = await supabase
         .from('posts')
         .select('*')
+        .order('published_at', { ascending: false })
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -62,6 +74,7 @@ export default function AdminPosts() {
   const handleOpenModal = (post?: Post) => {
     if (post) {
       setEditingPost(post);
+      const effectiveDate = getEffectivePostDate(post);
       setFormData({
         title: post.title,
         summary: (post as any).summary || '',
@@ -73,23 +86,16 @@ export default function AdminPosts() {
         category: post.category || '',
         categoriesText: Array.isArray((post as any).categories) ? (post as any).categories.join(', ') : '',
         status: post.status,
-        published_at: post.published_at ? new Date(post.published_at).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16),
+        published_at: effectiveDate ? new Date(effectiveDate).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16),
       });
+      setVisibilityMode(post.status === 'draft' ? 'draft' : effectiveDate && new Date(effectiveDate) > new Date() ? 'scheduled' : 'published');
     } else {
       setEditingPost(null);
       setFormData({
-        title: '',
-        summary: '',
-        byline: '',
-        content: '',
-        slug: '',
-        image_url: '',
-        video_url: '',
-        category: '',
-        categoriesText: '',
-        status: 'published',
+        ...initialFormData,
         published_at: new Date().toISOString().slice(0, 16),
       });
+      setVisibilityMode('published');
     }
     setIsModalOpen(true);
   };
@@ -110,10 +116,14 @@ export default function AdminPosts() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const savePost = async (modeOverride?: 'draft' | 'published' | 'scheduled') => {
     setSaving(true);
+    setActionLoading(modeOverride || visibilityMode);
     try {
+      const nowIso = new Date().toISOString();
+      const publishAt = normalizePublishedAt(formData.published_at);
+      const effectiveMode = modeOverride || visibilityMode;
+      const postStatus = effectiveMode === 'draft' ? 'draft' : 'published';
       const categories = (formData.categoriesText || '')
         .split(',')
         .map((s) => s.trim())
@@ -123,8 +133,9 @@ export default function AdminPosts() {
       const postData = {
         ...formData,
         categories,
-        published_at: formData.published_at ? new Date(formData.published_at).toISOString() : new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        published_at: postStatus === 'draft' ? null : publishAt || nowIso,
+        status: postStatus,
+        updated_at: nowIso,
       };
       delete (postData as any).categoriesText;
 
@@ -137,10 +148,10 @@ export default function AdminPosts() {
       } else {
         const { error } = await supabase
           .from('posts')
-          .insert([postData]);
+          .insert(postData);
         if (error) throw error;
       }
-      
+
       await fetchPosts();
       setIsModalOpen(false);
     } catch (error) {
@@ -148,7 +159,13 @@ export default function AdminPosts() {
       alert('Failed to save post');
     } finally {
       setSaving(false);
+      setActionLoading(null);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await savePost();
   };
 
   const handleDelete = async (id: string) => {
@@ -170,6 +187,17 @@ export default function AdminPosts() {
     p.title.toLowerCase().includes(search.toLowerCase())
   );
 
+  const postCounts = posts.reduce(
+    (acc, post) => {
+      const status = getPostStatus(post).toLowerCase();
+      if (status === 'published') acc.published += 1;
+      else if (status === 'scheduled') acc.scheduled += 1;
+      else acc.draft += 1;
+      return acc;
+    },
+    { published: 0, scheduled: 0, draft: 0 }
+  );
+
   if (isModalOpen) {
     return (
       <div className="space-y-8">
@@ -180,13 +208,24 @@ export default function AdminPosts() {
             </h1>
             <p className="text-stone-500 text-sm font-light">Write and publish to the website.</p>
           </div>
-          <button
-            type="button"
-            onClick={() => setIsModalOpen(false)}
-            className="px-6 py-3 border border-stone-200 bg-white text-stone-600 font-bold uppercase tracking-widest text-xs hover:bg-stone-50 transition-colors"
-          >
-            Back
-          </button>
+          <div className="flex items-center gap-3 flex-wrap justify-end">
+            <button
+              type="button"
+              onClick={() => savePost('draft')}
+              disabled={saving}
+              className="px-5 py-3 border border-stone-200 bg-white text-stone-700 font-bold uppercase tracking-widest text-xs hover:bg-stone-50 transition-colors disabled:opacity-50 inline-flex items-center gap-2 rounded-xl"
+            >
+              {saving && actionLoading === 'draft' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Save Draft
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(false)}
+              className="px-6 py-3 border border-stone-200 bg-white text-stone-600 font-bold uppercase tracking-widest text-xs hover:bg-stone-50 transition-colors rounded-xl"
+            >
+              Back
+            </button>
+          </div>
         </div>
 
         <div className="bg-white rounded-[2.5rem] border border-stone-200 shadow-sm overflow-hidden">
@@ -257,6 +296,31 @@ export default function AdminPosts() {
                 />
                 <p className="text-[11px] text-stone-400 leading-relaxed">
                   Use a future date/time to schedule the post. It will stay hidden on public pages until then.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Visibility</label>
+                <select
+                  value={visibilityMode}
+                  onChange={(e) => {
+                    const nextVisibility = e.target.value as 'published' | 'scheduled' | 'draft';
+                    setVisibilityMode(nextVisibility);
+                    if (nextVisibility === 'scheduled' && (!formData.published_at || new Date(formData.published_at) <= new Date())) {
+                      setFormData((prev) => ({
+                        ...prev,
+                        published_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
+                      }));
+                    }
+                  }}
+                  className="w-full px-6 py-4 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-accent transition-all"
+                >
+                  <option value="published">Published</option>
+                  <option value="scheduled">Scheduled</option>
+                  <option value="draft">Draft / Unpublished</option>
+                </select>
+                <p className="text-[11px] text-stone-400 leading-relaxed">
+                  Published posts show on the site. Scheduled posts wait for the date above.
                 </p>
               </div>
 
@@ -346,7 +410,7 @@ export default function AdminPosts() {
                   disabled={saving}
                   className="bg-primary text-white px-10 py-4 rounded-xl font-bold flex items-center gap-3 hover:bg-primary/90 transition-all disabled:opacity-50 shadow-xl shadow-primary/20"
                 >
-                  {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                  {saving && actionLoading !== 'draft' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
                   {editingPost ? 'Update Post' : 'Create Post'}
                 </button>
               </div>
@@ -359,10 +423,21 @@ export default function AdminPosts() {
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-between items-end">
+      <div className="flex justify-between items-end gap-6 flex-wrap">
         <div className="space-y-2">
           <h1 className="text-3xl font-serif font-bold text-primary tracking-tight">Posts Management</h1>
           <p className="text-stone-500 text-sm font-light">Create and manage your church news and announcements.</p>
+          <div className="flex items-center gap-3 flex-wrap pt-2">
+            <span className="px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest bg-accent text-white">
+              {postCounts.published} Published
+            </span>
+            <span className="px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest bg-stone-100 text-stone-600">
+              {postCounts.scheduled} Scheduled
+            </span>
+            <span className="px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-widest bg-rose-50 text-rose-700">
+              {postCounts.draft} Drafts
+            </span>
+          </div>
         </div>
         <button 
           onClick={() => handleOpenModal()}
@@ -412,11 +487,13 @@ export default function AdminPosts() {
                   <td className="px-8 py-6 font-bold text-primary text-base tracking-tight">{post.title}</td>
                   <td className="px-8 py-6">
                     <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-sm ${
-                      post.status === 'published' 
-                        ? 'bg-accent text-white' 
-                        : 'bg-stone-100 text-stone-500'
+                      getPostStatus(post) === 'Published'
+                        ? 'bg-accent text-white'
+                        : getPostStatus(post) === 'Scheduled'
+                          ? 'bg-stone-100 text-stone-600'
+                          : 'bg-rose-50 text-rose-700'
                     }`}>
-                      {post.status}
+                      {getPostStatus(post)}
                     </span>
                   </td>
                   <td className="px-8 py-6 text-stone-500 font-medium">

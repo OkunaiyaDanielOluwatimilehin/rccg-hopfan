@@ -38,7 +38,10 @@ function excerpt(value = '', max = 160) {
 function absoluteUrl(siteUrl, value, fallbackPath = '/Rccg_logo.png') {
   const raw = String(value || '').trim();
   const base = siteUrl.replace(/\/+$/, '');
-  if (!raw) return `${base}${fallbackPath}`;
+  if (!raw) {
+    if (/^https?:\/\//i.test(fallbackPath)) return fallbackPath;
+    return `${base}${fallbackPath}`;
+  }
   if (/^https?:\/\//i.test(raw)) return raw;
   return new URL(raw.startsWith('/') ? raw : `/${raw}`, base).toString();
 }
@@ -219,28 +222,28 @@ async function main() {
       path: '/sermons',
       title: 'Sermons | RCCG HOPFAN',
       description: 'Listen to and watch recent sermons from RCCG HOPFAN.',
-      image: absoluteUrl(siteUrl, firstSermon?.thumbnail_url || '', '/Rccg_logo.png'),
+      image: absoluteUrl(siteUrl, firstSermon?.thumbnail_url || '', 'https://images.unsplash.com/photo-1507692049790-de58290a4334?auto=format&fit=crop&q=80&w=1600'),
       type: 'website',
     },
     {
       path: '/editorial',
       title: 'Editorial | RCCG HOPFAN',
       description: 'Read articles, news, and reflections from RCCG HOPFAN.',
-      image: absoluteUrl(siteUrl, firstPost?.image_url || '', '/Rccg_logo.png'),
+      image: absoluteUrl(siteUrl, firstPost?.image_url || '', 'https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&q=80&w=1600'),
       type: 'website',
     },
     {
       path: '/devotionals',
       title: 'Devotionals | RCCG HOPFAN',
       description: 'Daily devotional content and spiritual encouragement from RCCG HOPFAN.',
-      image: absoluteUrl(siteUrl, latestDevotional?.image_url || '', '/Rccg_logo.png'),
+      image: absoluteUrl(siteUrl, latestDevotional?.image_url || '', 'https://images.unsplash.com/photo-1508128217447-2d5d3cd87e2b?auto=format&fit=crop&q=80&w=1600'),
       type: 'article',
     },
     {
       path: '/events',
       title: 'Events | RCCG HOPFAN',
       description: 'Browse upcoming church events, mark interest, and share event details with others.',
-      image: absoluteUrl(siteUrl, firstEvent?.image_url || '', '/Rccg_logo.png'),
+      image: absoluteUrl(siteUrl, firstEvent?.image_url || '', 'https://images.unsplash.com/photo-1438029071396-1e831a7fa6d8?auto=format&fit=crop&q=80&w=1600'),
       type: 'website',
     },
     {
@@ -316,7 +319,7 @@ async function main() {
     await writeRoute(baseHtml, `/events/${event.id}`, {
       title: `${event.title} | Events | RCCG HOPFAN`,
       description: event.description || `${event.title} happening on ${event.event_date}.`,
-      image: absoluteUrl(siteUrl, event.image_url || '', '/Rccg_logo.png'),
+      image: absoluteUrl(siteUrl, event.image_url || '', 'https://images.unsplash.com/photo-1438029071396-1e831a7fa6d8?auto=format&fit=crop&q=80&w=1600'),
       url: new URL(`/events/${event.id}`, siteUrl).toString(),
       type: 'article',
     });
@@ -327,7 +330,7 @@ async function main() {
     await writeRoute(baseHtml, `/editorial/${post.slug}`, {
       title: `${post.title} | Editorial | RCCG HOPFAN`,
       description: previewDescription,
-      image: absoluteUrl(siteUrl, post.image_url || '', '/Rccg_logo.png'),
+      image: absoluteUrl(siteUrl, post.image_url || '', 'https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&q=80&w=1600'),
       url: new URL(`/editorial/${post.slug}`, siteUrl).toString(),
       type: 'article',
     });
@@ -338,7 +341,7 @@ async function main() {
     await writeRoute(baseHtml, `/sermons/${sermon.id}`, {
       title: `${sermon.title} | Sermons | RCCG HOPFAN`,
       description: previewDescription,
-      image: absoluteUrl(siteUrl, sermon.thumbnail_url || '', '/Rccg_logo.png'),
+      image: absoluteUrl(siteUrl, sermon.thumbnail_url || '', 'https://images.unsplash.com/photo-1507692049790-de58290a4334?auto=format&fit=crop&q=80&w=1600'),
       url: new URL(`/sermons/${sermon.id}`, siteUrl).toString(),
       type: 'video.other',
     });

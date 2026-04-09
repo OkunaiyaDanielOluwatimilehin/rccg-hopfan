@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Post, Sermon, SiteSettings, Department, Leadership, GalleryItem, ChurchEvent, Testimonial } from '../types';
+import { Post, Sermon, SiteSettings, Department, Leadership, GalleryItem, ChurchEvent, Testimonial, Devotional } from '../types';
 import { Play, Calendar as CalendarIcon, ArrowRight, Clock, Users, Heart, Image as ImageIcon, Music, Mic2, ChevronLeft, ChevronRight, MapPin, MessageSquareHeart, CircleHelp, Landmark, Copy, Mail, Quote, Share2, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
@@ -12,6 +12,7 @@ import Seo from '../components/Seo';
 export default function Home() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [sermons, setSermons] = useState<Sermon[]>([]);
+  const [devotionals, setDevotionals] = useState<Devotional[]>([]);
   const [settings, setSettings] = useState<SiteSettings | null>(null);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [leadership, setLeadership] = useState<Leadership[]>([]);
@@ -26,6 +27,7 @@ export default function Home() {
         const nowIso = new Date().toISOString();
         const [
           postsRes,
+          devRes,
           sermonsRes,
           settingsRes,
           deptsRes,
@@ -36,6 +38,7 @@ export default function Home() {
         ] = await Promise.all([
           // Schema uses `status` (not `published`) and RLS allows everyone to select published posts.
           supabase.from('posts').select('*').eq('status', 'published').lte('published_at', nowIso).limit(8).order('published_at', { ascending: false }),
+          supabase.from('devotionals').select('*').eq('status', 'published').lte('published_at', nowIso).limit(8).order('published_at', { ascending: false }),
           supabase.from('sermons').select('*').limit(8).order('sermon_date', { ascending: false }),
           supabase.from('site_settings').select('*').single(),
           supabase.from('departments').select('*'),
@@ -47,6 +50,7 @@ export default function Home() {
 
         const firstError =
           postsRes.error ||
+          devRes.error ||
           sermonsRes.error ||
           settingsRes.error ||
           deptsRes.error ||
@@ -58,6 +62,7 @@ export default function Home() {
         if (firstError) throw firstError;
 
         if (postsRes.data) setPosts(postsRes.data);
+        if (devRes.data) setDevotionals(devRes.data);
         if (sermonsRes.data) setSermons(sermonsRes.data.filter((sermon: Sermon) => isVisibleSermon(sermon)));
         if (settingsRes.data) setSettings(settingsRes.data);
         if (deptsRes.data) setDepartments(deptsRes.data);
@@ -124,18 +129,59 @@ export default function Home() {
   }, [heroImagesKey]);
 
   const latestSlides = useMemo(() => {
-    const postSlides = posts.slice(0, 3).map((p) => ({
-      kind: 'post' as const,
-      id: p.id,
-      title: p.title,
-      subtitle: (p.summary as any) || p.byline || 'Editorial',
-      badge: 'Editorial',
-      imageUrl: p.image_url || 'https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&q=80&w=2000',
-      href: `/editorial/${p.slug}`,
-    }));
+    const latestPost = posts[0];
+    const latestDevotional = devotionals[0];
+    const latestSermon = sermons[0];
+    const latestEvent = [...visibleEvents]
+      .sort((a, b) => new Date(b.event_date).getTime() - new Date(a.event_date).getTime())[0];
 
-    return postSlides.length ? postSlides : [];
-  }, [posts]);
+    return [
+      latestPost ? {
+        kind: 'post' as const,
+        id: latestPost.id,
+        title: latestPost.title,
+        subtitle: (latestPost.summary as any) || latestPost.byline || 'Latest article from our editorial archive.',
+        badge: 'Article',
+        imageUrl: latestPost.image_url || 'https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&q=80&w=2000',
+        href: `/editorial/${latestPost.slug}`,
+      } : null,
+      latestDevotional ? {
+        kind: 'devotional' as const,
+        id: latestDevotional.id,
+        title: latestDevotional.title,
+        subtitle: latestDevotional.content || 'Latest devotional reflection from the ministry.',
+        badge: 'Devotional',
+        imageUrl: latestDevotional.image_url || 'https://images.unsplash.com/photo-1508128217447-2d5d3cd87e2b?auto=format&fit=crop&q=80&w=2000',
+        href: '/devotionals',
+      } : null,
+      latestSermon ? {
+        kind: 'sermon' as const,
+        id: latestSermon.id,
+        title: latestSermon.title,
+        subtitle: latestSermon.description || latestSermon.speaker_name || 'Latest sermon from the pulpit.',
+        badge: 'Sermon',
+        imageUrl: latestSermon.thumbnail_url || 'https://images.unsplash.com/photo-1507692049790-de58290a4334?auto=format&fit=crop&q=80&w=2000',
+        href: `/sermons/${latestSermon.id}`,
+      } : null,
+      latestEvent ? {
+        kind: 'event' as const,
+        id: latestEvent.id,
+        title: latestEvent.title,
+        subtitle: latestEvent.description || 'Latest church event and announcement.',
+        badge: 'Event',
+        imageUrl: latestEvent.image_url || 'https://images.unsplash.com/photo-1438029071396-1e831a7fa6d8?auto=format&fit=crop&q=80&w=2000',
+        href: `/events/${latestEvent.id}`,
+      } : null,
+    ].filter(Boolean) as Array<{
+      kind: 'post' | 'devotional' | 'sermon' | 'event';
+      id: string;
+      title: string;
+      subtitle: string;
+      badge: string;
+      imageUrl: string;
+      href: string;
+    }>;
+  }, [posts, devotionals, sermons, visibleEvents]);
 
   const latestEventSlides = useMemo(
     () =>
@@ -442,22 +488,24 @@ export default function Home() {
         </div>
       </section>
 
-      {/* What We Are - Full Width */}
+      {/* What We Are */}
       <section id="identity" className="w-full bg-white border-t-2 border-stone-200">
         <motion.div
           initial={{ opacity: 0, x: -30 }}
           whileInView={{ opacity: 1, x: 0 }}
           viewport={{ once: true }}
-          className="w-full p-8 sm:p-12 md:p-24 flex flex-col justify-center bg-white"
+          className="w-full px-4 sm:px-8 md:px-16 py-12 sm:py-20 md:py-28 bg-white"
         >
           <div className="max-w-4xl mx-auto w-full space-y-6 sm:space-y-8">
-            <div className="inline-block bg-accent/10 text-accent px-4 py-1.5 sm:px-6 sm:py-2 text-xs sm:text-sm font-bold uppercase tracking-widest mb-6 sm:mb-10">
+            <div className="inline-block bg-accent/10 text-accent px-4 py-1.5 sm:px-6 sm:py-2 text-xs sm:text-sm font-bold uppercase tracking-widest">
               Our Identity
             </div>
-            <h2 className="text-3xl sm:text-5xl md:text-8xl font-serif font-bold text-primary leading-tight">
+            <h2 className="text-3xl sm:text-5xl md:text-7xl font-serif font-bold text-primary leading-tight">
               {settings?.identity_title || aboutTitle}
             </h2>
-            <MarkdownContent value={settings?.identity_content || aboutContent} />
+            <div className="text-stone-600 text-base sm:text-lg leading-relaxed">
+              <MarkdownContent value={settings?.identity_content || aboutContent} />
+            </div>
             <div className="pt-2 sm:pt-4">
               <Link to="/about" className="group inline-flex items-center gap-2 text-primary font-bold hover:text-accent transition-colors text-base sm:text-lg">
                 Learn more about our mission <ArrowRight className="w-5 h-5 sm:w-6 h-6 group-hover:translate-x-1 transition-transform" />
@@ -467,22 +515,22 @@ export default function Home() {
         </motion.div>
       </section>
 
-      {/* Editorial */}
-      <section id="editorial" className="w-full px-4 sm:px-8 md:px-16 border-t-2 border-stone-200 py-16 sm:py-24 bg-stone-50/30">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-12 sm:mb-16">
+      {/* Latest Updates */}
+      <section id="latest" className="w-full px-4 sm:px-8 md:px-16 border-t-2 border-stone-200 py-16 sm:py-24 bg-primary text-white">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-10 sm:mb-14">
           <div className="max-w-2xl">
-            <h2 className="text-3xl sm:text-5xl font-serif font-bold mb-4 sm:mb-6 text-primary">Editorial</h2>
-            <p className="text-lg sm:text-xl text-stone-500 font-light">
-              Articles and devotionals from our ministry.
+            <h2 className="text-3xl sm:text-5xl font-serif font-bold mb-4 sm:mb-6 text-white">Latest Updates</h2>
+            <p className="text-lg sm:text-xl text-stone-300 font-light">
+              Articles, devotionals, sermons, and events from our ministry.
             </p>
           </div>
         </div>
 
         <div className="-mx-4 sm:-mx-8 md:-mx-16">
           {latestSlides.length === 0 ? (
-            <div className="bg-white border-y border-stone-200 p-10 text-stone-500">No content yet.</div>
+            <div className="bg-white/5 border-y border-white/10 p-10 text-stone-300">No content yet.</div>
           ) : (
-            <div className="relative overflow-hidden border-y border-stone-200 bg-primary text-white shadow-2xl h-[70vh] min-h-[520px]">
+            <div className="relative overflow-hidden bg-primary text-white shadow-2xl min-h-[72vh]">
               <AnimatePresence mode="wait">
                 <motion.img
                   key={latestSlides[Math.min(latestIndex, latestSlides.length - 1)]!.imageUrl}
@@ -492,18 +540,18 @@ export default function Home() {
                   transition={{ duration: 0.9 }}
                   src={latestSlides[Math.min(latestIndex, latestSlides.length - 1)]!.imageUrl}
                   alt=""
-                  className="absolute inset-0 w-full h-full object-cover opacity-35"
+                  className="absolute inset-0 w-full h-full object-cover opacity-30"
                   referrerPolicy="no-referrer"
                 />
               </AnimatePresence>
-              <div className="absolute inset-0 bg-gradient-to-r from-primary via-primary/70 to-primary/25" />
-              <div className="absolute inset-x-0 bottom-0 h-52 bg-gradient-to-t from-primary via-primary/50 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-r from-primary via-primary/75 to-primary/30" />
+              <div className="absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-primary via-primary/70 to-transparent" />
 
-              <div className="relative px-6 sm:px-10 md:px-16 py-10 sm:py-14 h-full flex flex-col justify-between gap-10">
+              <div className="relative px-6 sm:px-10 md:px-16 py-10 sm:py-14 h-full min-h-[72vh] flex flex-col justify-between gap-10">
                 <div className="space-y-5">
                   <div className="inline-flex items-center gap-3 text-xs font-bold uppercase tracking-widest">
                     <span className="px-4 py-2 bg-accent/20 text-accent border border-accent/20">{latestSlides[latestIndex]!.badge}</span>
-                    <span className="px-4 py-2 bg-white/10 border border-white/15">Article</span>
+                    <span className="px-4 py-2 bg-white/10 border border-white/15">Latest</span>
                   </div>
                   <h3 className="text-4xl sm:text-6xl font-serif font-bold leading-tight tracking-tight">
                     {latestSlides[latestIndex]!.title}
@@ -538,6 +586,33 @@ export default function Home() {
               </div>
             </div>
           )}
+        </div>
+      </section>
+
+      {/* Service Times */}
+      <section className="w-full bg-primary text-white border-t-2 border-stone-200">
+        <div className="w-full px-4 sm:px-8 md:px-16 py-12 sm:py-20 md:py-24">
+          <div className="max-w-4xl mx-auto">
+            <div className="flex items-center gap-4 mb-8 sm:mb-12">
+              <Clock className="w-6 h-6 sm:w-8 h-8 text-accent shrink-0" />
+              <h3 className="text-2xl sm:text-4xl font-serif font-bold">Service Times</h3>
+            </div>
+            <div className="space-y-5 sm:space-y-8">
+              {serviceTimes.length > 0 ? (
+                serviceTimes.map((service, idx) => (
+                  <div key={idx} className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 sm:gap-4 border-b border-white/10 pb-5 sm:pb-6 last:border-0">
+                    <div>
+                      <p className="text-accent font-bold text-[10px] sm:text-sm uppercase tracking-widest mb-1">{service.day}</p>
+                      <h4 className="text-lg sm:text-2xl font-bold leading-tight">{service.activity}</h4>
+                    </div>
+                    <div className="text-stone-300 font-medium text-sm sm:text-lg sm:text-right">{service.time}</div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-stone-300 italic">Service times will be shared soon.</p>
+              )}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -851,29 +926,6 @@ export default function Home() {
           {(visibleEvents.length === 0) ? (
             <p className="text-stone-400 italic col-span-full text-center py-12">No events have been added yet.</p>
           ) : null}
-        </div>
-      </section>
-
-      {/* Service Times */}
-      <section className="w-full bg-primary text-white border-t-2 border-stone-200">
-        <div className="w-full px-4 sm:px-8 md:px-16 py-14 sm:py-24">
-          <div className="max-w-4xl mx-auto">
-            <h3 className="text-2xl sm:text-4xl font-serif font-bold mb-8 sm:mb-12 flex items-center gap-4">
-              <Clock className="w-6 h-6 sm:w-8 h-8 text-accent" />
-              Service Times
-            </h3>
-            <div className="space-y-5 sm:space-y-8">
-              {serviceTimes.map((service, idx) => (
-                <div key={idx} className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 border-b border-white/10 pb-5 sm:pb-6 last:border-0">
-                  <div>
-                    <p className="text-accent font-bold text-[10px] sm:text-sm uppercase tracking-widest mb-1">{service.day}</p>
-                    <h4 className="text-lg sm:text-2xl font-bold">{service.activity}</h4>
-                  </div>
-                  <div className="text-stone-300 font-medium text-sm sm:text-lg">{service.time}</div>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </section>
 

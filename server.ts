@@ -5,6 +5,7 @@ import path from "path";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import dotenv from "dotenv";
+import { createRequire } from "module";
 
 function loadEnv() {
   // Match Vite's typical env file precedence:
@@ -20,6 +21,9 @@ function loadEnv() {
 }
 
 loadEnv();
+
+const require = createRequire(import.meta.url);
+const { getVerse } = require("@glowstudent/youversion");
 
 async function startServer() {
   const app = express();
@@ -67,6 +71,41 @@ async function startServer() {
     } catch (error) {
       console.error("Error generating presigned URL:", error);
       res.status(500).json({ error: "Failed to generate upload URL" });
+    }
+  });
+
+  app.get("/api/bible/verse", async (req, res) => {
+    const reference = typeof req.query.reference === "string" ? req.query.reference.trim() : "";
+    const version = typeof req.query.version === "string" ? req.query.version.trim().toUpperCase() || "NIV" : "NIV";
+
+    const match = reference.match(/^(?<book>(?:[1-3]\s)?[A-Za-z][A-Za-z'\-\s]+?)\s+(?<chapter>\d+):(?<start>\d+)(?:-(?<end>\d+))?$/);
+    if (!match?.groups?.book || !match.groups.chapter || !match.groups.start) {
+      return res.status(400).json({ error: "Invalid reference format" });
+    }
+
+    const book = match.groups.book.trim();
+    const chapter = match.groups.chapter.trim();
+    const verseStart = match.groups.start.trim();
+    const verseEnd = match.groups.end?.trim();
+    const verses = verseEnd ? `${verseStart}-${verseEnd}` : verseStart;
+
+    try {
+      const result = await getVerse(book, chapter, verses, version);
+      if (!result?.passage) {
+        return res.status(404).json({ error: "Verse not found" });
+      }
+
+      return res.json({
+        book: result.book || book,
+        chapter,
+        verses,
+        version: result.version || version,
+        reference: `${book} ${chapter}:${verses}`,
+        passage: result.passage,
+      });
+    } catch (error) {
+      console.error("Error looking up bible verse:", error);
+      return res.status(500).json({ error: "Failed to look up verse" });
     }
   });
 

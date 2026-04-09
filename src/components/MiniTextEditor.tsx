@@ -1,5 +1,24 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Bold, Eye, Heading1, Heading2, Heading3, Italic, List, Minus, PencilLine, Quote, Redo2, Type, Undo2 } from 'lucide-react';
+import {
+  AlignCenter,
+  AlignJustify,
+  AlignLeft,
+  AlignRight,
+  Bold,
+  ChevronDown,
+  Eye,
+  Heading1,
+  Heading2,
+  Heading3,
+  Italic,
+  List,
+  Minus,
+  PencilLine,
+  Quote,
+  Redo2,
+  Type,
+  Undo2,
+} from 'lucide-react';
 import MarkdownContent from './MarkdownContent';
 
 type Props = {
@@ -10,19 +29,21 @@ type Props = {
   label?: string;
   previewTitle?: string;
   previewSubtitle?: string;
+  enableScriptureLookup?: boolean;
 };
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-export default function MiniTextEditor({ value, onChange, placeholder, rows = 8, label, previewTitle, previewSubtitle }: Props) {
+export default function MiniTextEditor({ value, onChange, placeholder, rows = 8, label, previewTitle, previewSubtitle, enableScriptureLookup = false }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const selectionRef = useRef({ start: 0, end: 0 });
   const historyRef = useRef<string[]>([value || '']);
   const historyIndexRef = useRef(0);
   const [historyMeta, setHistoryMeta] = useState({ index: 0, length: 1 });
   const [preview, setPreview] = useState(false);
+  const [alignmentMenuOpen, setAlignmentMenuOpen] = useState(false);
 
   const hasText = useMemo(() => (value || '').trim().length > 0, [value]);
 
@@ -78,45 +99,60 @@ export default function MiniTextEditor({ value, onChange, placeholder, rows = 8,
     applyValue(next, start + left.length, end + left.length);
   };
 
+  const transformSelectedLines = (transform: (line: string) => string) => {
+    const selection = readSelection();
+    if (!selection) return;
+    const { start, end } = selection;
+    const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+    const lineEndIndex = value.indexOf('\n', end);
+    const blockEnd = lineEndIndex === -1 ? value.length : lineEndIndex;
+    const block = value.slice(lineStart, blockEnd);
+    const transformed = block
+      .split('\n')
+      .map(transform)
+      .join('\n');
+    const next = value.slice(0, lineStart) + transformed + value.slice(blockEnd);
+    applyValue(next, lineStart, lineStart + transformed.length);
+  };
+
   const prefixCurrentLine = (prefix: string) => {
     const selection = readSelection();
     if (!selection) return;
     const { start, end } = selection;
     const lineStart = value.lastIndexOf('\n', start - 1) + 1;
-    const next = value.slice(0, lineStart) + prefix + value.slice(lineStart);
-    applyValue(next, start + prefix.length, end + prefix.length);
+    const lineEndIndex = value.indexOf('\n', end);
+    const blockEnd = lineEndIndex === -1 ? value.length : lineEndIndex;
+    const currentLine = value.slice(lineStart, blockEnd).replace(/^(#{1,3}\s+|>\s+|[-*+]\s+)/, '');
+    const next = value.slice(0, lineStart) + prefix + currentLine + value.slice(blockEnd);
+    applyValue(next, lineStart + prefix.length, lineStart + prefix.length + currentLine.length);
+  };
+
+  const setHeading = (prefix: string) => {
+    const selection = readSelection();
+    if (!selection) return;
+    if (selection.start !== selection.end) {
+      transformSelectedLines((line) => `${prefix}${line.replace(/^(#{1,3}\s+|>\s+|[-*+]\s+)/, '')}`);
+      return;
+    }
+    prefixCurrentLine(prefix);
+  };
+
+  const setQuote = () => {
+    const selection = readSelection();
+    if (!selection) return;
+    if (selection.start !== selection.end) {
+      transformSelectedLines((line) => `> ${line.replace(/^(#{1,3}\s+|>\s+|[-*+]\s+)/, '')}`);
+      return;
+    }
+    prefixCurrentLine('> ');
   };
 
   const prefixSelectedLines = (prefix: string) => {
-    const selection = readSelection();
-    if (!selection) return;
-    const { start, end } = selection;
-    const lineStart = value.lastIndexOf('\n', start - 1) + 1;
-    const lineEndIndex = value.indexOf('\n', end);
-    const blockEnd = lineEndIndex === -1 ? value.length : lineEndIndex;
-    const block = value.slice(lineStart, blockEnd);
-    const transformed = block
-      .split('\n')
-      .map((line) => `${prefix}${line}`)
-      .join('\n');
-    const next = value.slice(0, lineStart) + transformed + value.slice(blockEnd);
-    applyValue(next, start + prefix.length, end + prefix.length);
+    transformSelectedLines((line) => `${prefix}${line.replace(/^(#{1,3}\s+|>\s+|[-*+]\s+)/, '')}`);
   };
 
   const stripSelectedLines = () => {
-    const selection = readSelection();
-    if (!selection) return;
-    const { start, end } = selection;
-    const lineStart = value.lastIndexOf('\n', start - 1) + 1;
-    const lineEndIndex = value.indexOf('\n', end);
-    const blockEnd = lineEndIndex === -1 ? value.length : lineEndIndex;
-    const block = value.slice(lineStart, blockEnd);
-    const transformed = block
-      .split('\n')
-      .map((line) => line.replace(/^(#{1,3}\s+|>\s+|[-*+]\s+)/, ''))
-      .join('\n');
-    const next = value.slice(0, lineStart) + transformed + value.slice(blockEnd);
-    applyValue(next, start, end);
+    transformSelectedLines((line) => line.replace(/^(#{1,3}\s+|>\s+|[-*+]\s+)/, ''));
   };
 
   const insertAtCursor = (text: string) => {
@@ -125,6 +161,20 @@ export default function MiniTextEditor({ value, onChange, placeholder, rows = 8,
     const { start, end } = selection;
     const next = value.slice(0, start) + text + value.slice(end);
     applyValue(next, start + text.length, start + text.length);
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const plainText = e.clipboardData.getData('text/plain');
+    if (!plainText) return;
+
+    e.preventDefault();
+    const selection = readSelection();
+    if (!selection) return;
+
+    const normalized = plainText.replace(/\r\n/g, '\n');
+    const { start, end } = selection;
+    const next = value.slice(0, start) + normalized + value.slice(end);
+    applyValue(next, start + normalized.length, start + normalized.length);
   };
 
   const makeNormalText = () => {
@@ -136,8 +186,36 @@ export default function MiniTextEditor({ value, onChange, placeholder, rows = 8,
       return;
     }
 
-    const next = value.slice(0, start) + '\n\n' + value.slice(end);
-    applyValue(next, start + 2, start + 2);
+    const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+    const lineEndIndex = value.indexOf('\n', end);
+    const blockEnd = lineEndIndex === -1 ? value.length : lineEndIndex;
+    const currentLine = value.slice(lineStart, blockEnd).replace(/^(#{1,3}\s+|>\s+|[-*+]\s+)/, '');
+    const next = value.slice(0, lineStart) + currentLine + value.slice(blockEnd);
+    applyValue(next, lineStart, lineStart + currentLine.length);
+  };
+
+  const wrapAlignmentBlock = (alignment: 'left' | 'center' | 'right' | 'justify') => {
+    const selection = readSelection();
+    if (!selection) return;
+    const { start, end } = selection;
+    const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+    const lineEndIndex = value.indexOf('\n', end);
+    const blockEnd = lineEndIndex === -1 ? value.length : lineEndIndex;
+    const block = value.slice(lineStart, blockEnd).trim();
+    if (!block) return;
+
+    if (alignment === 'left') {
+      const cleared = block
+        .replace(/^:::\s*(left|center|right|justify)\s*\n/i, '')
+        .replace(/\n:::\s*$/i, '');
+      const next = value.slice(0, lineStart) + cleared + value.slice(blockEnd);
+      applyValue(next, lineStart, lineStart + cleared.length);
+      return;
+    }
+
+    const wrapped = `:::${alignment}\n${block}\n:::`;
+    const next = value.slice(0, lineStart) + wrapped + value.slice(blockEnd);
+    applyValue(next, lineStart + wrapped.length, lineStart + wrapped.length);
   };
 
   const undo = () => {
@@ -192,7 +270,7 @@ export default function MiniTextEditor({ value, onChange, placeholder, rows = 8,
           </button>
           <button
             {...toolbarButtonProps}
-            onClick={() => prefixCurrentLine('# ')}
+            onClick={() => setHeading('# ')}
             className="p-2 border border-stone-200 bg-white hover:bg-stone-50 text-stone-600"
             title="Heading 1"
           >
@@ -200,7 +278,7 @@ export default function MiniTextEditor({ value, onChange, placeholder, rows = 8,
           </button>
           <button
             {...toolbarButtonProps}
-            onClick={() => prefixCurrentLine('## ')}
+            onClick={() => setHeading('## ')}
             className="p-2 border border-stone-200 bg-white hover:bg-stone-50 text-stone-600"
             title="Heading 2"
           >
@@ -208,7 +286,7 @@ export default function MiniTextEditor({ value, onChange, placeholder, rows = 8,
           </button>
           <button
             {...toolbarButtonProps}
-            onClick={() => prefixCurrentLine('### ')}
+            onClick={() => setHeading('### ')}
             className="p-2 border border-stone-200 bg-white hover:bg-stone-50 text-stone-600"
             title="Heading 3"
           >
@@ -232,7 +310,7 @@ export default function MiniTextEditor({ value, onChange, placeholder, rows = 8,
           </button>
           <button
             {...toolbarButtonProps}
-            onClick={() => prefixCurrentLine('> ')}
+            onClick={setQuote}
             className="p-2 border border-stone-200 bg-white hover:bg-stone-50 text-stone-600"
             title="Blockquote"
           >
@@ -261,6 +339,47 @@ export default function MiniTextEditor({ value, onChange, placeholder, rows = 8,
           >
             <List className="w-4 h-4" />
           </button>
+          <div className="relative">
+            <button
+              {...toolbarButtonProps}
+              onClick={() => setAlignmentMenuOpen((open) => !open)}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 border text-[10px] font-bold uppercase tracking-widest transition-colors ${
+                alignmentMenuOpen ? 'border-accent bg-accent/10 text-primary' : 'border-stone-200 bg-white hover:bg-stone-50 text-stone-600'
+              }`}
+              title="Text alignment"
+            >
+              <AlignLeft className="w-4 h-4" />
+              Align
+              <ChevronDown className="w-3 h-3" />
+            </button>
+            {alignmentMenuOpen ? (
+              <div className="absolute right-0 top-full z-20 mt-2 w-44 border border-stone-200 bg-white shadow-xl">
+                {[
+                  { label: 'Left', value: 'left', icon: AlignLeft },
+                  { label: 'Center', value: 'center', icon: AlignCenter },
+                  { label: 'Right', value: 'right', icon: AlignRight },
+                  { label: 'Justify', value: 'justify', icon: AlignJustify },
+                ].map((option) => {
+                  const Icon = option.icon;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        wrapAlignmentBlock(option.value as 'left' | 'center' | 'right' | 'justify');
+                        setAlignmentMenuOpen(false);
+                      }}
+                      className="flex w-full items-center gap-3 px-4 py-3 text-left text-xs font-bold uppercase tracking-widest text-stone-600 hover:bg-stone-50 hover:text-primary transition-colors"
+                    >
+                      <Icon className="w-4 h-4" />
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
           <button
             {...toolbarButtonProps}
             onClick={() => setPreview((p) => !p)}
@@ -276,7 +395,7 @@ export default function MiniTextEditor({ value, onChange, placeholder, rows = 8,
 
       {preview ? (
         <div className="border border-stone-200 bg-white p-6">
-          <div className="max-w-3xl mx-auto">
+          <div className="max-w-5xl mx-auto">
             {previewTitle ? (
               <div className="mb-8 space-y-2">
                 <h1 className="text-4xl md:text-5xl font-serif font-bold tracking-tight text-primary">{previewTitle}</h1>
@@ -284,7 +403,7 @@ export default function MiniTextEditor({ value, onChange, placeholder, rows = 8,
               </div>
             ) : null}
             {hasText ? (
-              <MarkdownContent value={value} />
+              <MarkdownContent value={value} enableScriptureLookup={enableScriptureLookup} />
             ) : (
               <p className="text-stone-400 italic">Nothing to preview.</p>
             )}
@@ -299,9 +418,10 @@ export default function MiniTextEditor({ value, onChange, placeholder, rows = 8,
           onClick={rememberSelection}
           onKeyUp={rememberSelection}
           onMouseUp={rememberSelection}
+          onPaste={handlePaste}
           rows={rows}
           placeholder={placeholder}
-          className="w-full p-4 border border-stone-200 focus:ring-4 focus:ring-accent/10 outline-none transition-all bg-white"
+          className="w-full p-4 border border-stone-200 focus:ring-4 focus:ring-accent/10 outline-none transition-all bg-white text-left"
         />
       )}
     </div>

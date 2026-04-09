@@ -11,6 +11,7 @@ import EventInterestModal from '../components/EventInterestModal';
 const EventDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [event, setEvent] = useState<ChurchEvent | null>(null);
+  const [relatedEvents, setRelatedEvents] = useState<ChurchEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [interestedOpen, setInterestedOpen] = useState(false);
   const shareUrl = useMemo(() => (typeof window !== 'undefined' ? window.location.href : ''), []);
@@ -26,7 +27,7 @@ const EventDetail: React.FC = () => {
           .single();
 
         if (error) throw error;
-        if ((data as any)?.published_at && new Date((data as any).published_at) > new Date()) {
+        if ((data as any)?.status === 'draft' || ((data as any)?.published_at && new Date((data as any).published_at) > new Date())) {
           setEvent(null);
         } else {
           setEvent(data as ChurchEvent);
@@ -41,6 +42,30 @@ const EventDetail: React.FC = () => {
 
     fetchEvent();
   }, [id]);
+
+  useEffect(() => {
+    const loadRelatedEvents = async () => {
+      if (!event) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('events')
+          .select('*')
+          .eq('status', 'published')
+          .lte('published_at', new Date().toISOString())
+          .neq('id', event.id)
+          .order('event_date', { ascending: true })
+          .limit(3);
+        if (error) throw error;
+        setRelatedEvents((data || []) as ChurchEvent[]);
+      } catch (err) {
+        console.error('Error fetching related events:', err);
+        setRelatedEvents([]);
+      }
+    };
+
+    loadRelatedEvents();
+  }, [event]);
 
   const handleShare = async () => {
     if (!event) return;
@@ -83,7 +108,7 @@ const EventDetail: React.FC = () => {
       <Seo
         title={`${event.title} | RCCG HOPFAN Events`}
         description={event.description || 'Event details from RCCG HOPFAN.'}
-        image={event.image_url}
+        image={event.image_url || 'https://images.unsplash.com/photo-1438029071396-1e831a7fa6d8?auto=format&fit=crop&q=80&w=1600'}
         path={`/events/${event.id}`}
         type="article"
       />
@@ -130,8 +155,8 @@ const EventDetail: React.FC = () => {
       </section>
 
       <section className="w-full px-4 sm:px-8 md:px-16 -mt-10 sm:-mt-12 relative z-20">
-        <div className="grid lg:grid-cols-3 gap-8 sm:gap-12">
-          <div className="lg:col-span-2 space-y-12">
+        <div className="max-w-7xl mx-auto grid lg:grid-cols-[1.35fr_0.65fr] gap-8 sm:gap-12 items-start">
+          <div className="space-y-12">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -139,7 +164,7 @@ const EventDetail: React.FC = () => {
               className="bg-white p-6 sm:p-12 md:p-16 shadow-xl border border-stone-100"
             >
               <h3 className="text-xl sm:text-2xl font-bold text-primary mb-6 sm:mb-8 border-b border-stone-100 pb-4">About the Event</h3>
-              <div className="prose prose-stone max-w-none text-base sm:text-lg text-stone-600 leading-relaxed">
+              <div className="max-w-none text-base sm:text-lg text-stone-600 leading-relaxed text-left">
                 {event.description
                   ? event.description.split('\n').map((para, i) => (
                       <p key={i} className="mb-6">
@@ -208,6 +233,29 @@ const EventDetail: React.FC = () => {
                   <HeartHandshake className="w-5 h-5 group-hover:scale-110 transition-transform" />
                 </button>
               </div>
+            </div>
+
+            <div className="bg-white p-6 sm:p-10 border border-stone-100 shadow-lg">
+              <h4 className="text-lg sm:text-xl font-bold text-primary mb-6">Related Events</h4>
+              {relatedEvents.length > 0 ? (
+                <div className="space-y-4">
+                  {relatedEvents.map((item) => (
+                    <Link
+                      key={item.id}
+                      to={`/events/${item.id}`}
+                      className="block border border-stone-100 bg-stone-50/50 hover:bg-white hover:border-accent/30 transition-all p-4"
+                    >
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-accent mb-2">
+                        {format(new Date(item.event_date), 'MMM d, yyyy')}
+                      </p>
+                      <h5 className="font-serif font-bold text-primary text-lg leading-tight line-clamp-2">{item.title}</h5>
+                      <p className="text-sm text-stone-500 mt-2 line-clamp-2">{item.location}</p>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-stone-500">No related events found yet.</p>
+              )}
             </div>
           </div>
         </div>

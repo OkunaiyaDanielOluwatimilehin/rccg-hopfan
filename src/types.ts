@@ -158,6 +158,7 @@ export interface Devotional {
   author?: string;
   date?: string;
   published_at?: string;
+  status?: 'draft' | 'published';
   image_url?: string;
   scripture_reference?: string;
   devotional_date?: string;
@@ -182,10 +183,29 @@ export interface ChurchEvent {
   description: string;
   event_date: string;
   published_at?: string;
+  status?: 'draft' | 'published';
   event_time: string;
   location: string;
   category: string;
   image_url?: string;
+  created_at: string;
+}
+
+export interface PostComment {
+  id: string;
+  post_id: string;
+  user_id: string;
+  display_name?: string | null;
+  body: string;
+  created_at: string;
+}
+
+export interface DevotionalComment {
+  id: string;
+  devotional_id: string;
+  user_id: string;
+  display_name?: string | null;
+  body: string;
   created_at: string;
 }
 
