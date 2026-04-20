@@ -1,49 +1,63 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { 
-  LayoutDashboard, 
-  FileText, 
-  Video, 
-  Settings, 
-  LogOut, 
+import {
+  LayoutDashboard,
+  FileText,
+  Video,
+  Settings,
+  LogOut,
   ChevronRight,
   ArrowLeft,
   MessageSquare,
   Users,
   BookOpen,
-  CalendarDays
+  CalendarDays,
+  ClipboardList,
+  Bell,
+  Radio,
 } from 'lucide-react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { supabase } from '../../lib/supabase';
+import { AdminRole, RolePermissions } from '../../types';
+import { canAccessSection, getFirstAllowedPath, normalizeAdminRole, resolveAdminSection } from '../../lib/adminAccess';
 
 export default function AdminDashboard() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, loading, signOut } = useAuth();
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [role, setRole] = useState<AdminRole>('member');
+  const [rolePermissions, setRolePermissions] = useState<RolePermissions | null>(null);
+  const [isAllowedUser, setIsAllowedUser] = useState(false);
   const [checkingAdmin, setCheckingAdmin] = useState(true);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [notificationCount, setNotificationCount] = useState(0);
 
   const contentItems = [
-    { name: 'Articles & Posts', path: '/admin/posts', icon: FileText },
-    { name: 'Sermons', path: '/admin/sermons', icon: Video },
-    { name: 'Devotionals', path: '/admin/devotionals', icon: BookOpen },
-    { name: 'Events', path: '/admin/events', icon: CalendarDays },
+    { name: 'Articles & Posts', path: '/admin/posts', icon: FileText, section: 'posts' as const },
+    { name: 'Sermons', path: '/admin/sermons', icon: Video, section: 'sermons' as const },
+    { name: 'Devotionals', path: '/admin/devotionals', icon: BookOpen, section: 'devotionals' as const },
+    { name: 'Events', path: '/admin/events', icon: CalendarDays, section: 'events' as const },
+    { name: 'Testimonials', path: '/admin/testimonials', icon: MessageSquare, section: 'testimonials' as const },
   ];
 
   const settingsItems = [
-    { name: 'Overview', path: '/admin/settings' },
-    { name: 'Content', path: '/admin/settings/content' },
-    { name: 'Branding', path: '/admin/settings/branding' },
-    { name: 'Community', path: '/admin/settings/community' },
+    { name: 'Overview', path: '/admin/settings', section: 'settings' as const },
+    { name: 'Content', path: '/admin/settings/content', section: 'settings' as const },
+    { name: 'Branding', path: '/admin/settings/branding', section: 'settings' as const },
+    { name: 'Community', path: '/admin/settings/community', section: 'settings' as const },
   ];
 
   const menuItems = [
-    { name: 'Overview', path: '/admin', icon: LayoutDashboard },
-    { name: 'Testimonials', path: '/admin/testimonials', icon: MessageSquare },
-    { name: 'Users', path: '/admin/users', icon: Users },
-    { name: 'Settings', path: '/admin/settings', icon: Settings },
+    { name: 'Overview', path: '/admin', icon: LayoutDashboard, section: 'overview' as const },
+    { name: 'Live Stream', path: '/admin/live', icon: Radio, section: 'livestream' as const },
+    { name: 'Notifications', path: '/admin/notifications', icon: Bell, section: 'notifications' as const },
+    { name: 'Users', path: '/admin/users', icon: Users, section: 'users' as const },
+    { name: 'Prayer Requests', path: '/admin/prayer-requests', icon: MessageSquare, section: 'prayer_requests' as const },
+    { name: 'Counseling', path: '/admin/counseling-requests', icon: MessageSquare, section: 'counseling_requests' as const },
+    { name: 'Follow Up', path: '/admin/follow-up', icon: MessageSquare, section: 'follow_up' as const },
+    { name: 'Department Requests', path: '/admin/department-requests', icon: ClipboardList, section: 'department_requests' as const },
+    { name: 'Settings', path: '/admin/settings', icon: Settings, section: 'settings' as const },
   ];
 
   const currentLocation = `${location.pathname}${location.hash || ''}`;
@@ -60,6 +74,14 @@ export default function AdminDashboard() {
       }
     }
   }, [user, loading, navigate]);
+
+  useEffect(() => {
+    if (!user || loading || checkingAdmin || !isAllowedUser) return;
+    const currentSection = resolveAdminSection(location.pathname);
+    if (currentSection && !canAccessSection(role, currentSection, rolePermissions)) {
+      navigate(getFirstAllowedPath(role, rolePermissions), { replace: true });
+    }
+  }, [user, loading, checkingAdmin, isAllowedUser, location.pathname, role, rolePermissions, navigate]);
 
   useEffect(() => {
     const loadAvatar = async () => {
@@ -81,24 +103,68 @@ export default function AdminDashboard() {
     loadAvatar();
   }, [user?.id, user]);
 
+  useEffect(() => {
+    const loadNotificationCount = async () => {
+      if (!user || role === 'member') {
+        setNotificationCount(0);
+        return;
+      }
+
+      try {
+        const { count, error } = await supabase
+          .from('request_notifications')
+          .select('id', { count: 'exact', head: true })
+          .eq('recipient_profile_id', user.id)
+          .is('read_at', null);
+        if (error) {
+          if (!error.message.includes('request_notifications')) throw error;
+          setNotificationCount(0);
+        } else {
+          setNotificationCount(count || 0);
+        }
+      } catch (error) {
+        console.error('Error loading notification count:', error);
+        setNotificationCount(0);
+      }
+    };
+
+    loadNotificationCount();
+  }, [user, role]);
+
   const checkAdminStatus = async () => {
     if (!user) return;
     
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
+      const [profileRes, settingsRes] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single(),
+        supabase
+          .from('site_settings')
+          .select('role_permissions')
+          .maybeSingle(),
+      ]);
 
-      if (error) throw error;
+      if (profileRes.error) throw profileRes.error;
       
-      if (data?.role === 'admin') {
-        setIsAdmin(true);
-      } else {
+      const normalizedRole = normalizeAdminRole(profileRes.data?.role);
+      if (normalizedRole === 'member') {
         alert('Access denied. You do not have administrative privileges.');
         await signOut();
         navigate('/admin/login');
+        return;
+      }
+
+      const permissions = (settingsRes.data as any)?.role_permissions || null;
+      setRole(normalizedRole);
+      setRolePermissions(permissions);
+      setIsAllowedUser(true);
+
+      const currentSection = resolveAdminSection(location.pathname);
+      if (currentSection && !canAccessSection(normalizedRole, currentSection, permissions)) {
+        navigate(getFirstAllowedPath(normalizedRole, permissions), { replace: true });
       }
     } catch (err) {
       console.error('Error checking admin status:', err);
@@ -114,7 +180,15 @@ export default function AdminDashboard() {
   };
 
   if (loading || checkingAdmin) return <div className="p-8">Loading dashboard...</div>;
-  if (!isAdmin) return null;
+  if (!isAllowedUser) return null;
+
+  const visibleMenuItems = menuItems.filter((item) => canAccessSection(role, item.section, rolePermissions));
+  const visibleContentItems = contentItems.filter((item) => canAccessSection(role, item.section, rolePermissions));
+  const visibleSettingsItems = settingsItems.filter((item) => canAccessSection(role, item.section, rolePermissions));
+  const coreItems = visibleMenuItems.filter((item) => ['overview', 'notifications', 'users', 'livestream'].includes(item.section));
+  const requestItems = visibleMenuItems.filter((item) => ['prayer_requests', 'counseling_requests', 'follow_up', 'department_requests'].includes(item.section));
+  const contentNavItems = visibleContentItems;
+  const settingsNavItems = visibleSettingsItems;
 
   return (
     <div className="min-h-screen bg-stone-50 flex">
@@ -135,40 +209,54 @@ export default function AdminDashboard() {
           </Link>
         </div>
 
-        <nav className="flex-grow p-4 space-y-1">
-          {menuItems.map((item) => {
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`flex items-center justify-between px-4 py-3 text-sm font-medium transition-all group ${
-                  isActive 
-                    ? 'bg-accent text-white shadow-lg shadow-accent/20' 
-                    : 'text-stone-300 hover:bg-white/10'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <item.icon className={`w-5 h-5 transition-colors ${isActive ? 'text-white' : 'text-stone-400 group-hover:text-white'}`} />
-                  {item.name}
-                </div>
-                {isActive && <ChevronRight className="w-4 h-4" />}
-              </Link>
-            );
-          })}
-
-          <div className="pt-4 mt-4 border-t border-white/10">
-            <p className="px-4 pb-3 text-[10px] font-bold uppercase tracking-[0.3em] text-stone-400">Content</p>
+        <nav className="flex-grow p-4 space-y-4">
+          {coreItems.length > 0 ? (
             <div className="space-y-1">
-              {contentItems.map((item) => {
+              <p className="px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.3em] text-stone-400">Core</p>
+              {coreItems.map((item) => {
+                const active = isActive(item.path);
+                const isNotifications = item.section === 'notifications';
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    className={`flex items-center justify-between px-4 py-3 text-sm font-medium transition-all group ${
+                      active
+                        ? 'bg-accent text-white shadow-lg shadow-accent/20'
+                        : isNotifications && notificationCount > 0
+                          ? 'bg-white/10 text-white ring-1 ring-accent/30'
+                          : 'text-stone-300 hover:bg-white/10'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <item.icon className={`w-5 h-5 transition-colors ${active || (isNotifications && notificationCount > 0) ? 'text-white' : 'text-stone-400 group-hover:text-white'}`} />
+                      {item.name}
+                    </div>
+                    <span className="inline-flex items-center gap-2">
+                      {isNotifications && notificationCount > 0 ? (
+                        <span className="min-w-5 h-5 px-1 inline-flex items-center justify-center rounded-full bg-accent text-white text-[10px] font-bold animate-pulse">
+                          {notificationCount}
+                        </span>
+                      ) : null}
+                      {active && <ChevronRight className="w-4 h-4" />}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {requestItems.length > 0 ? (
+            <div className="space-y-1 pt-4 border-t border-white/10">
+              <p className="px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.3em] text-stone-400">Requests</p>
+              {requestItems.map((item) => {
                 const active = isActive(item.path);
                 return (
                   <Link
                     key={item.path}
                     to={item.path}
                     className={`flex items-center justify-between px-4 py-2.5 text-sm font-medium transition-all group ${
-                      active
-                        ? 'bg-white/10 text-white'
-                        : 'text-stone-300 hover:bg-white/10'
+                      active ? 'bg-white/10 text-white' : 'text-stone-300 hover:bg-white/10'
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -180,21 +268,43 @@ export default function AdminDashboard() {
                 );
               })}
             </div>
-          </div>
+          ) : null}
 
-          <div className="pt-4 mt-4 border-t border-white/10">
-            <p className="px-4 pb-3 text-[10px] font-bold uppercase tracking-[0.3em] text-stone-400">Settings</p>
-            <div className="space-y-1">
-              {settingsItems.map((item) => {
+          {contentNavItems.length > 0 ? (
+            <div className="space-y-1 pt-4 border-t border-white/10">
+              <p className="px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.3em] text-stone-400">Content</p>
+              {contentNavItems.map((item) => {
+                const active = isActive(item.path);
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    className={`flex items-center justify-between px-4 py-2.5 text-sm font-medium transition-all group ${
+                      active ? 'bg-white/10 text-white' : 'text-stone-300 hover:bg-white/10'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <item.icon className={`w-4 h-4 transition-colors ${active ? 'text-white' : 'text-stone-400 group-hover:text-white'}`} />
+                      <span className="text-sm">{item.name}</span>
+                    </div>
+                    {active && <ChevronRight className="w-4 h-4" />}
+                  </Link>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {settingsNavItems.length > 0 ? (
+            <div className="space-y-1 pt-4 border-t border-white/10">
+              <p className="px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.3em] text-stone-400">Settings</p>
+              {settingsNavItems.map((item) => {
                 const active = currentLocation === item.path;
                 return (
                   <Link
                     key={item.path}
                     to={item.path}
                     className={`flex items-center justify-between px-4 py-2.5 text-sm font-medium transition-all group ${
-                      active
-                        ? 'bg-white/10 text-white'
-                        : 'text-stone-300 hover:bg-white/10'
+                      active ? 'bg-white/10 text-white' : 'text-stone-300 hover:bg-white/10'
                     }`}
                   >
                     <span className="text-sm">{item.name}</span>
@@ -203,7 +313,7 @@ export default function AdminDashboard() {
                 );
               })}
             </div>
-          </div>
+          ) : null}
         </nav>
 
         <div className="p-4 border-t border-white/10">
@@ -217,7 +327,7 @@ export default function AdminDashboard() {
             </div>
             <div className="flex-grow min-w-0">
               <p className="text-xs font-bold truncate text-white">{user?.email}</p>
-              <p className="text-[10px] text-accent uppercase tracking-wider">Admin</p>
+              <p className="text-[10px] text-accent uppercase tracking-wider">{role}</p>
             </div>
           </div>
           <button
@@ -245,25 +355,43 @@ export default function AdminDashboard() {
 
       {/* Mobile Bottom Nav */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-stone-200">
-        <div className="max-w-6xl mx-auto grid grid-cols-4 gap-0 px-1 py-2">
-          {menuItems.map((item) => {
-            const isActive = location.pathname === item.path;
+        <div
+          className="max-w-6xl mx-auto grid gap-0 px-1 py-2"
+          style={{ gridTemplateColumns: `repeat(${Math.max(Math.min(visibleMenuItems.length, 4), 1) + 2}, minmax(0, 1fr))` }}
+        >
+          {visibleMenuItems.slice(0, 4).map((item) => {
+            const active = location.pathname === item.path;
             return (
               <Link
                 key={`mobile-${item.path}`}
                 to={item.path}
                 className={`flex flex-col items-center justify-center gap-0.5 px-1 py-2 transition-colors min-w-0 ${
-                  isActive ? 'text-primary' : 'text-stone-600'
+                  active ? 'text-primary' : 'text-stone-600'
                 }`}
                 aria-label={item.name}
               >
-                <item.icon className={`w-4 h-4 ${isActive ? 'text-primary' : 'text-stone-400'}`} />
+                <item.icon className={`w-4 h-4 ${active ? 'text-primary' : 'text-stone-400'}`} />
                 <span className="text-[8px] font-bold uppercase tracking-widest text-center leading-tight">
                   {item.name}
                 </span>
               </Link>
             );
           })}
+
+          {role !== 'member' ? (
+            <Link
+              to="/admin/notifications"
+              className={`flex flex-col items-center justify-center gap-0.5 px-1 py-2 transition-colors min-w-0 ${
+                notificationCount > 0 ? 'text-primary' : 'text-stone-600'
+              }`}
+              aria-label="Notifications"
+            >
+              <Bell className={`w-4 h-4 ${notificationCount > 0 ? 'text-primary animate-pulse' : 'text-stone-400'}`} />
+              <span className="text-[8px] font-bold uppercase tracking-widest text-center leading-tight">
+                Notifications
+              </span>
+            </Link>
+          ) : null}
 
           <button
             type="button"

@@ -3,6 +3,7 @@ import { Calendar, Edit2, Loader2, Plus, Save, Search, Trash2 } from 'lucide-rea
 import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
 import { ChurchEvent } from '../../types';
+import { isMissingColumnError } from '../../lib/requestSchema';
 
 const initialFormData = {
   title: '',
@@ -34,7 +35,10 @@ export default function AdminEvents() {
   async function fetchEvents() {
     setLoading(true);
     try {
-      const { data, error } = await supabase.from('events').select('*').order('published_at', { ascending: false }).order('event_date', { ascending: false });
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .order('event_date', { ascending: false });
       if (error) throw error;
       setEvents((data || []) as ChurchEvent[]);
     } catch (error) {
@@ -89,7 +93,6 @@ export default function AdminEvents() {
         status: eventStatus,
         updated_at: nowIso,
       };
-
       if (editingEvent) {
         const { error } = await supabase.from('events').update(payload).eq('id', editingEvent.id);
         if (error) throw error;

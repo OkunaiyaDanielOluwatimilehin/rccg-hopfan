@@ -1,30 +1,60 @@
 import React, { useEffect, useState } from 'react';
-import { BarChart3, FileText, Video, ArrowUpRight } from 'lucide-react';
+import { BarChart3, Clock3, FileText, Video, ArrowUpRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
+import { formatDistanceToNow } from 'date-fns';
 
 import { supabase } from '../../lib/supabase';
+
+type ActivityLog = {
+  id: string;
+  action: string;
+  entity_type: string;
+  title: string;
+  body?: string | null;
+  actor_name?: string | null;
+  created_at: string;
+};
 
 export default function DashboardOverview() {
   const [stats, setStats] = useState({
     posts: 0,
     sermons: 0,
   });
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [activityLoading, setActivityLoading] = useState(true);
 
   useEffect(() => {
     async function fetchStats() {
       try {
-        const [postsRes, sermonsRes] = await Promise.all([
+        const [postsRes, sermonsRes, activityRes] = await Promise.all([
           supabase.from('posts').select('id', { count: 'exact', head: true }),
           supabase.from('sermons').select('id', { count: 'exact', head: true }),
+          supabase
+            .from('admin_activity_logs')
+            .select('id,action,entity_type,title,body,actor_name,created_at')
+            .order('created_at', { ascending: false })
+            .limit(6),
         ]);
 
         setStats({
           posts: postsRes.count || 0,
           sermons: sermonsRes.count || 0,
         });
+
+        if (activityRes.error) {
+          if (!activityRes.error.message.includes('relation "admin_activity_logs" does not exist')) {
+            throw activityRes.error;
+          }
+          setActivityLogs([]);
+        } else {
+          setActivityLogs((activityRes.data || []) as ActivityLog[]);
+        }
       } catch (error) {
         console.error('Error fetching dashboard stats:', error);
+        setActivityLogs([]);
+      } finally {
+        setActivityLoading(false);
       }
     }
     fetchStats();
@@ -72,12 +102,40 @@ export default function DashboardOverview() {
             <BarChart3 className="w-7 h-7 text-accent" />
             Recent Activity
           </h3>
-          <div className="space-y-8">
-            <div className="text-center py-24 bg-stone-50 border border-dashed border-stone-200">
-              <p className="text-stone-400 text-base font-medium">
-                Activity logs will appear here as you manage content.
-              </p>
-            </div>
+          <div className="space-y-4">
+            {activityLoading ? (
+              <div className="text-center py-16 bg-stone-50 border border-dashed border-stone-200 text-stone-400">
+                Loading activity logs...
+              </div>
+            ) : activityLogs.length === 0 ? (
+              <div className="text-center py-16 bg-stone-50 border border-dashed border-stone-200">
+                <p className="text-stone-400 text-base font-medium">
+                  Activity logs will appear here as you manage content.
+                </p>
+              </div>
+            ) : (
+              activityLogs.map((log) => (
+                <div key={log.id} className="p-4 border border-stone-200 bg-stone-50 flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <span className="inline-flex items-center gap-2 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest bg-primary/10 text-primary">
+                        {log.action.replace(/_/g, ' ')}
+                      </span>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-stone-400">
+                        {log.entity_type.replace(/_/g, ' ')}
+                      </span>
+                    </div>
+                    <p className="font-semibold text-primary">{log.title}</p>
+                    {log.body ? <p className="text-sm text-stone-600 mt-1">{log.body}</p> : null}
+                    <p className="mt-2 text-[11px] text-stone-400 flex items-center gap-2">
+                      <Clock3 className="w-3 h-3" />
+                      {formatDistanceToNow(new Date(log.created_at), { addSuffix: true })}
+                      {log.actor_name ? <span>• {log.actor_name}</span> : null}
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
 

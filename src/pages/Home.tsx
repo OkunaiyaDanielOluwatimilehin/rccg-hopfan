@@ -8,6 +8,45 @@ import Modal from '../components/Modal';
 import { supabase } from '../lib/supabase';
 import MarkdownContent from '../components/MarkdownContent';
 import Seo from '../components/Seo';
+import { fetchCurrentLiveStream, fetchLatestLiveAnnouncement, getViewerPlaybackUrl, isActiveLiveStream, subscribeToLiveStreamChanges } from '../lib/liveStream';
+import type { LiveAnnouncement, LiveStream } from '../types';
+import LiveStreamPlayer from '../components/LiveStreamPlayer';
+
+function formatHeroTitle(title: string) {
+  return title
+    .replace(/WELCOME TO\s+RCCG\s+HOUSE OF PRAYERS?\s+FOR ALL NATIONS\.?/i, 'WELCOME TO RCCG HOUSE OF\nPRAYER FOR ALL NATIONS.')
+    .replace(/WELCOME TO\s+HOUSE OF PRAYERS?\s+FOR ALL NATIONS\.?/i, 'WELCOME TO HOUSE OF\nPRAYER FOR ALL NATIONS.')
+    .replace(/RCCG\s+HOUSE OF PRAYERS?\s+FOR ALL NATIONS\.?/i, 'RCCG HOUSE OF\nPRAYER FOR ALL NATIONS.')
+    .trim();
+}
+
+function renderHeroTitle(title: string) {
+  const formatted = formatHeroTitle(title);
+  const [firstLine, ...rest] = formatted.split('\n').map((part) => part.trim()).filter(Boolean);
+  const remaining = rest.join(' ');
+
+  if (/^welcome to/i.test(firstLine || '')) {
+    const body = remaining || firstLine.replace(/^welcome to\s*/i, '');
+    const bodyParts = body.split(/\s+/);
+    const bottomLine = bodyParts.slice(3).join(' ');
+
+    return (
+      <>
+        <span className="block text-xs sm:text-sm md:text-base font-bold uppercase tracking-[0.45em] text-accent/90 mb-4">
+          Welcome to
+        </span>
+        <span className="block">RCCG House of</span>
+        <span className="block text-accent">{bottomLine ? `Prayer for All Nations.` : body}</span>
+      </>
+    );
+  }
+
+  return formatted.split('\n').map((line, index) => (
+    <span key={`${line}-${index}`} className={`block ${index === 1 ? 'text-accent' : ''}`}>
+      {line}
+    </span>
+  ));
+}
 
 export default function Home() {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -19,6 +58,8 @@ export default function Home() {
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
   const [events, setEvents] = useState<ChurchEvent[]>([]);
   const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
+  const [liveStream, setLiveStream] = useState<LiveStream | null>(null);
+  const [liveAnnouncement, setLiveAnnouncement] = useState<LiveAnnouncement | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -79,6 +120,39 @@ export default function Home() {
     fetchAllData();
   }, []);
 
+  useEffect(() => {
+    let disposed = false;
+
+    const loadLive = async () => {
+      try {
+        const [streamRes, announcementRes] = await Promise.all([fetchCurrentLiveStream(), fetchLatestLiveAnnouncement()]);
+        if (disposed) return;
+        setLiveStream((streamRes.data as LiveStream | null) || null);
+        setLiveAnnouncement((announcementRes.data as LiveAnnouncement | null) || null);
+      } catch (error) {
+        console.error('Error loading live stream on home:', error);
+      }
+    };
+
+    loadLive();
+
+    const unsubscribe = subscribeToLiveStreamChanges(async () => {
+      try {
+        const [streamRes, announcementRes] = await Promise.all([fetchCurrentLiveStream(), fetchLatestLiveAnnouncement()]);
+        if (disposed) return;
+        setLiveStream((streamRes.data as LiveStream | null) || null);
+        setLiveAnnouncement((announcementRes.data as LiveAnnouncement | null) || null);
+      } catch (error) {
+        console.error('Error refreshing live stream on home:', error);
+      }
+    });
+
+    return () => {
+      disposed = true;
+      unsubscribe();
+    };
+  }, []);
+
   // Default values if settings are not yet in DB
   const heroTitle = settings?.hero_title || '';
   const heroSubtitle = settings?.hero_subtitle || '';
@@ -89,6 +163,12 @@ export default function Home() {
   const heroImagesKey = heroImages.join('|');
   const aboutTitle = settings?.about_us_title || '';
   const aboutContent = settings?.about_us_content || '';
+  const featuredDepartmentIds = Array.isArray((settings as any)?.featured_department_ids)
+    ? ((settings as any).featured_department_ids as string[])
+    : [];
+  const featuredDepartmentColumns = Math.max(1, Number((settings as any)?.featured_department_columns || 4));
+  const featuredDepartmentRows = Math.max(1, Number((settings as any)?.featured_department_rows || 2));
+  const featuredDepartmentLimit = featuredDepartmentColumns * featuredDepartmentRows;
 
   const serviceTimes = settings?.service_times || [];
 
@@ -96,7 +176,8 @@ export default function Home() {
   const [activeModal, setActiveModal] = useState<'prayer' | 'counseling' | 'giving' | null>(null);
   const [heroIndex, setHeroIndex] = useState(0);
   const [latestIndex, setLatestIndex] = useState(0);
-  const [selectedDept, setSelectedDept] = useState<string | null>(null);
+  const [activeDepartment, setActiveDepartment] = useState<Department | null>(null);
+  const [departmentModalMode, setDepartmentModalMode] = useState<'details' | 'join'>('details');
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
   const [copiedAccountIndex, setCopiedAccountIndex] = useState<number | null>(null);
   const isVisibleSermon = (sermon: Sermon) => {
@@ -119,6 +200,19 @@ export default function Home() {
     () => events.filter((event) => !event.published_at || new Date(event.published_at) <= new Date()),
     [events],
   );
+
+  const featuredDepartments = useMemo(() => {
+    const selected = featuredDepartmentIds.filter(Boolean);
+    if (selected.length === 0) return departments.slice(0, featuredDepartmentLimit);
+    const order = new Map(selected.map((id, index) => [id, index]));
+    return departments
+      .filter((department) => order.has(department.id))
+      .sort((a, b) => (order.get(a.id) || 0) - (order.get(b.id) || 0))
+      .slice(0, featuredDepartmentLimit);
+  }, [departments, featuredDepartmentIds.join('|'), featuredDepartmentLimit]);
+
+  const liveIsActive = isActiveLiveStream(liveStream);
+  const livePlaybackUrl = getViewerPlaybackUrl(liveStream);
 
   useEffect(() => {
     if (heroImages.length < 2) return;
@@ -212,11 +306,30 @@ export default function Home() {
       .slice(0, 6);
   }, [gallery]);
 
-  const handleDeptSubmit = (e: React.FormEvent, deptName: string) => {
+  const handleDeptSubmit = async (e: React.FormEvent, dept: Department) => {
     e.preventDefault();
-    setFormSuccess(`Thank you for your interest in the ${deptName} department. We will contact you soon!`);
-    setSelectedDept(null);
-    setTimeout(() => setFormSuccess(null), 5000);
+    const form = e.target as HTMLFormElement;
+    const data = new FormData(form);
+    try {
+      const { error } = await supabase.from('department_requests').insert({
+        department_id: dept.id,
+        department_name: dept.name,
+        full_name: data.get('full_name'),
+        email: data.get('email'),
+        phone: data.get('phone'),
+        notes: data.get('notes'),
+        status: 'new',
+      });
+      if (error) throw error;
+      setFormSuccess(`Thank you for your interest in the ${dept.name} department. We will contact you soon!`);
+      setActiveDepartment(null);
+      setDepartmentModalMode('details');
+      form.reset();
+      setTimeout(() => setFormSuccess(null), 5000);
+    } catch (error) {
+      console.error('Error submitting department request:', error);
+      alert('Failed to submit request.');
+    }
   };
 
   const scroll = (direction: 'left' | 'right') => {
@@ -253,15 +366,15 @@ export default function Home() {
           </AnimatePresence>
         )}
         <div className="absolute inset-0 bg-gradient-to-r from-primary via-primary/70 to-transparent" />
-        <div className="relative z-10 w-full px-8 md:px-16">
-          <div className="max-w-3xl text-left">
+        <div className="relative z-10 w-full px-8 md:px-16 pt-12 sm:pt-14 md:pt-16 pb-20 sm:pb-24 md:pb-28">
+          <div className="max-w-4xl text-left">
           {heroTitle && (
             <motion.h1
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
-              className="text-4xl sm:text-5xl md:text-8xl font-serif text-white font-bold mb-6 tracking-tight"
+              className="font-display text-3xl sm:text-4xl md:text-6xl lg:text-7xl text-white font-bold mb-6 tracking-[-0.03em] leading-[0.95] max-w-[14ch] drop-shadow-[0_8px_30px_rgba(0,0,0,0.35)]"
             >
-              {heroTitle}
+              {renderHeroTitle(heroTitle)}
             </motion.h1>
           )}
           {heroSubtitle && (
@@ -269,7 +382,7 @@ export default function Home() {
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="text-lg md:text-2xl text-stone-200 mb-10 max-w-2xl font-light leading-relaxed"
+              className="text-base sm:text-lg md:text-xl lg:text-2xl text-stone-200 mb-10 max-w-2xl font-light leading-relaxed"
             >
               {heroSubtitle}
             </motion.p>
@@ -293,24 +406,73 @@ export default function Home() {
             >
               Recent Sermons
             </Link>
+            <Link
+              to="/live"
+              className="bg-rose-600 hover:bg-rose-500 text-white px-10 py-4 font-bold flex items-center justify-center gap-3 transition-all shadow-xl shadow-rose-600/20 w-full sm:w-auto"
+            >
+              <span className="inline-flex h-2.5 w-2.5 rounded-full bg-white animate-pulse" />
+              Watch Live
+            </Link>
           </motion.div>
           </div>
         </div>
 
-        {heroImages.length > 1 && (
-          <div className="absolute bottom-8 left-8 md:left-16 z-10 flex items-center gap-2">
-            {heroImages.map((_, i) => (
-              <button
-                key={i}
-                onClick={() => setHeroIndex(i)}
-                className={`h-2.5 w-2.5 rounded-full transition-all ${
-                  i === heroIndex ? 'bg-accent w-8' : 'bg-white/40 hover:bg-white/60'
-                }`}
-                aria-label={`Go to slide ${i + 1}`}
-              />
-            ))}
+      </section>
+
+      <section className="w-full px-4 sm:px-8 md:px-16">
+        <div className={`relative overflow-hidden border ${liveIsActive ? 'border-rose-200 bg-gradient-to-r from-rose-50 via-white to-amber-50' : 'border-stone-200 bg-white'} shadow-lg`}>
+          <div className="grid gap-0 lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,1fr)]">
+            <div className="p-8 sm:p-12 lg:p-16">
+              <div className="inline-flex items-center gap-2 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.35em] border border-stone-200 bg-white text-stone-600">
+                {liveIsActive ? 'Live Now' : 'Livestream'}
+              </div>
+              <h2 className="mt-5 text-3xl sm:text-4xl lg:text-6xl font-serif font-bold text-primary tracking-tight">
+                {liveStream?.title || 'Join the church livestream'}
+              </h2>
+              <p className="mt-4 text-stone-600 text-base sm:text-lg leading-relaxed max-w-2xl">
+                {liveAnnouncement?.body || liveStream?.description || 'Watch the service live from anywhere and stay connected through the stream.'}
+              </p>
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Link
+                  to="/live"
+                  className="inline-flex items-center gap-2 px-5 py-3 text-xs font-bold uppercase tracking-widest bg-primary text-white hover:bg-primary/90 transition-colors"
+                >
+                  Open Live Page
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+                <Link
+                  to="/events"
+                  className="inline-flex items-center gap-2 px-5 py-3 text-xs font-bold uppercase tracking-widest border border-stone-200 text-stone-600 hover:border-primary hover:text-primary transition-colors bg-white"
+                >
+                  View Events
+                </Link>
+              </div>
+            </div>
+            <div className="relative min-h-[260px] lg:min-h-full bg-primary">
+              {livePlaybackUrl && liveIsActive ? (
+                <LiveStreamPlayer
+                  playbackUrl={livePlaybackUrl}
+                  title={liveStream?.title || 'Live stream'}
+                  muted={true}
+                  className="w-full h-full min-h-[260px] lg:min-h-[420px]"
+                />
+              ) : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-8 text-white">
+                  <p className="text-xs font-bold uppercase tracking-[0.35em] text-white/50">No live broadcast yet</p>
+                  <p className="mt-3 max-w-sm text-sm sm:text-base text-white/75 leading-relaxed">
+                    When the stream goes live, the player will appear here automatically.
+                  </p>
+                  <Link
+                    to="/live"
+                    className="mt-6 inline-flex items-center gap-2 px-5 py-3 text-xs font-bold uppercase tracking-widest bg-white text-primary hover:bg-stone-100 transition-colors"
+                  >
+                    Go to Live
+                  </Link>
+                </div>
+              )}
+            </div>
           </div>
-        )}
+        </div>
       </section>
 
       {/* Event Carousel */}
@@ -496,20 +658,43 @@ export default function Home() {
           viewport={{ once: true }}
           className="w-full px-4 sm:px-8 md:px-16 py-12 sm:py-20 md:py-28 bg-white"
         >
-          <div className="max-w-4xl mx-auto w-full space-y-6 sm:space-y-8">
-            <div className="inline-block bg-accent/10 text-accent px-4 py-1.5 sm:px-6 sm:py-2 text-xs sm:text-sm font-bold uppercase tracking-widest">
-              Our Identity
-            </div>
-            <h2 className="text-3xl sm:text-5xl md:text-7xl font-serif font-bold text-primary leading-tight">
-              {settings?.identity_title || aboutTitle}
-            </h2>
-            <div className="text-stone-600 text-base sm:text-lg leading-relaxed">
-              <MarkdownContent value={settings?.identity_content || aboutContent} />
-            </div>
-            <div className="pt-2 sm:pt-4">
-              <Link to="/about" className="group inline-flex items-center gap-2 text-primary font-bold hover:text-accent transition-colors text-base sm:text-lg">
-                Learn more about our mission <ArrowRight className="w-5 h-5 sm:w-6 h-6 group-hover:translate-x-1 transition-transform" />
-              </Link>
+        <div className="mx-auto w-full max-w-7xl">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center">
+              <motion.div
+                initial={{ opacity: 0, x: -24 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                className="relative min-h-[320px] sm:min-h-[420px] lg:min-h-[560px] overflow-hidden bg-stone-100 shadow-2xl"
+              >
+                {settings?.identity_image_url ? (
+                  <img
+                    src={settings.identity_image_url}
+                    alt={settings?.identity_title || 'Our Identity'}
+                    className="absolute inset-0 w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-stone-100 to-accent/10" />
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-primary/25 via-transparent to-transparent" />
+              </motion.div>
+
+              <div className="space-y-6 sm:space-y-8">
+                <div className="inline-block bg-accent/10 text-accent px-4 py-1.5 sm:px-6 sm:py-2 text-xs sm:text-sm font-bold uppercase tracking-widest">
+                  Our Identity
+                </div>
+                <h2 className="text-3xl sm:text-5xl md:text-6xl font-serif font-bold text-primary leading-tight max-w-2xl">
+                  {settings?.identity_title || aboutTitle}
+                </h2>
+                <div className="text-stone-600 text-base sm:text-lg leading-relaxed max-w-2xl">
+                  <MarkdownContent value={settings?.identity_content || aboutContent} />
+                </div>
+                <div className="pt-2 sm:pt-4">
+                  <Link to="/about" className="group inline-flex items-center gap-2 text-primary font-bold hover:text-accent transition-colors text-base sm:text-lg">
+                    Learn more about our mission <ArrowRight className="w-5 h-5 sm:w-6 h-6 group-hover:translate-x-1 transition-transform" />
+                  </Link>
+                </div>
+              </div>
             </div>
           </div>
         </motion.div>
@@ -786,84 +971,157 @@ export default function Home() {
             )}
           </AnimatePresence>
         </div>
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-          {departments.map((dept, idx) => {
-            const isSelected = selectedDept === dept.name;
-            
+        <div
+          className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:[grid-template-columns:repeat(var(--dept-cols),minmax(0,1fr))]"
+          style={{ ['--dept-cols' as any]: featuredDepartmentColumns }}
+        >
+          {featuredDepartments.map((dept, idx) => {
             return (
               <motion.div
                 key={idx}
                 layout
-                className={`bg-stone-50 border transition-all duration-500 overflow-hidden flex flex-col ${isSelected ? 'border-accent shadow-2xl lg:col-span-2 bg-white' : 'border-stone-100 hover:shadow-xl'}`}
+                className="group relative aspect-square overflow-hidden border border-stone-100 bg-primary shadow-lg transition-all duration-500 hover:shadow-2xl"
               >
-                {dept.image_url && (
-                  <div className={`relative overflow-hidden ${isSelected ? 'h-64' : 'h-48'}`}>
-                    <img 
-                      src={dept.image_url} 
-                      alt={dept.name} 
-                      className="w-full h-full object-cover transition-transform duration-700 hover:scale-110"
+                <div className="absolute inset-0">
+                  {dept.image_url ? (
+                    <img
+                      src={dept.image_url}
+                      alt={dept.name}
+                      className="h-full w-full object-cover object-[center_30%] transition-transform duration-700 group-hover:scale-105"
                       referrerPolicy="no-referrer"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-60" />
+                  ) : (
+                    <div className="h-full w-full bg-gradient-to-br from-stone-200 via-stone-100 to-stone-300" />
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-primary via-primary/70 to-transparent" />
+                </div>
+                <div className="absolute inset-0 flex flex-col justify-end p-5 sm:p-6 text-white">
+                  <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/10 backdrop-blur border border-white/10">
+                    <Users className="w-6 h-6 text-accent" />
                   </div>
-                )}
-                <div className="p-12 flex-1 flex flex-col">
-                  <div className="flex items-start justify-between mb-10">
-                    <div className={`w-16 h-16 flex items-center justify-center transition-colors ${isSelected ? 'bg-accent text-white' : 'bg-white text-primary shadow-sm'}`}>
-                      <Users className="w-8 h-8" />
-                    </div>
-                    {!isSelected && (
-                      <button 
-                        onClick={() => setSelectedDept(dept.name)}
-                        className="text-xs font-bold text-accent uppercase tracking-widest hover:underline"
-                      >
-                        Join Now
-                      </button>
-                    )}
+                  <h3 className="text-xl sm:text-2xl font-serif font-bold leading-tight">{dept.name}</h3>
+                  <p className="mt-2 text-sm text-stone-200 leading-relaxed line-clamp-2 max-w-[32ch]">
+                    {dept.description}
+                  </p>
+                  <div className="mt-4 flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveDepartment(dept);
+                        setDepartmentModalMode('join');
+                      }}
+                      className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.25em] text-white bg-white/10 px-3 py-2 border border-white/15 backdrop-blur-sm transition-colors hover:bg-white/20"
+                    >
+                      Join Now
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveDepartment(dept);
+                        setDepartmentModalMode('details');
+                      }}
+                      className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.25em] text-accent hover:text-white transition-colors"
+                    >
+                      Read More <ArrowRight className="w-4 h-4" />
+                    </button>
                   </div>
-                  <h3 className="text-2xl font-serif font-bold mb-4 text-primary">{dept.name}</h3>
-                  <p className="text-stone-500 text-base leading-relaxed mb-8 font-light">{dept.description}</p>
-                  
-                  <AnimatePresence>
-                    {isSelected && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="overflow-hidden"
-                      >
-                        <div className="pt-8 border-t border-stone-100 space-y-6">
-                          <h4 className="text-xl font-bold text-primary">Interest Form: {dept.name}</h4>
-                          <form onSubmit={(e) => handleDeptSubmit(e, dept.name)} className="space-y-6">
-                            <div className="grid md:grid-cols-2 gap-6">
-                              <input required type="text" placeholder="Full Name" className="w-full p-5 bg-stone-50 border border-stone-200 outline-none focus:ring-2 focus:ring-accent" />
-                              <input required type="email" placeholder="Email Address" className="w-full p-5 bg-stone-50 border border-stone-200 outline-none focus:ring-2 focus:ring-accent" />
-                            </div>
-                            <textarea required placeholder="Tell us why you'd like to join..." className="w-full p-5 bg-stone-50 border border-stone-200 outline-none focus:ring-2 focus:ring-accent h-32" />
-                            <div className="flex gap-6">
-                              <button type="submit" className="flex-1 bg-accent text-white py-5 font-bold hover:bg-accent/90 transition-all shadow-lg shadow-accent/20">
-                                Submit Application
-                              </button>
-                              <button 
-                                type="button"
-                                onClick={() => setSelectedDept(null)}
-                                className="px-8 py-5 border border-stone-200 font-bold text-stone-400 hover:bg-stone-50 transition-all"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </form>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
                 </div>
               </motion.div>
             );
           })}
-          {departments.length === 0 && <p className="text-stone-400 text-center w-full py-20 italic col-span-full">No departments listed yet.</p>}
+          {featuredDepartments.length === 0 && <p className="text-stone-400 text-center w-full py-20 italic col-span-full">No featured departments selected yet.</p>}
         </div>
       </section>
+
+      <Modal
+        isOpen={!!activeDepartment}
+        onClose={() => setActiveDepartment(null)}
+        title={activeDepartment ? activeDepartment.name : 'Department'}
+      >
+        {activeDepartment ? (
+          <div className="space-y-6">
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => setDepartmentModalMode('details')}
+                className={`px-4 py-2 text-xs font-bold uppercase tracking-widest border transition-colors ${
+                  departmentModalMode === 'details'
+                    ? 'bg-primary text-white border-primary'
+                    : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
+                }`}
+              >
+                About
+              </button>
+              <button
+                type="button"
+                onClick={() => setDepartmentModalMode('join')}
+                className={`px-4 py-2 text-xs font-bold uppercase tracking-widest border transition-colors ${
+                  departmentModalMode === 'join'
+                    ? 'bg-accent text-white border-accent'
+                    : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
+                }`}
+              >
+                Join Form
+              </button>
+            </div>
+            {activeDepartment.image_url ? (
+              <div className="aspect-[16/9] overflow-hidden bg-stone-100">
+                <img
+                  src={activeDepartment.image_url}
+                  alt={activeDepartment.name}
+                  className="w-full h-full object-cover object-center"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+            ) : null}
+            <div className="space-y-4">
+              <p className="text-stone-600 leading-relaxed">{activeDepartment.description}</p>
+              {departmentModalMode === 'details' ? (
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setDepartmentModalMode('join')}
+                    className="inline-flex items-center gap-2 bg-accent text-white px-5 py-3 font-bold hover:bg-accent/90 transition-all shadow-lg shadow-accent/20"
+                  >
+                    Join This Department <ArrowRight className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveDepartment(null)}
+                    className="px-5 py-3 border border-stone-200 font-bold text-stone-500 hover:bg-stone-50 transition-all"
+                  >
+                    Close
+                  </button>
+                </div>
+              ) : (
+                <form
+                  onSubmit={(e) => handleDeptSubmit(e, activeDepartment)}
+                  className="space-y-4"
+                >
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <input name="full_name" required type="text" placeholder="Full Name" className="w-full p-4 bg-stone-50 border border-stone-200 focus:ring-2 focus:ring-accent outline-none text-primary" />
+                    <input name="email" required type="email" placeholder="Email Address" className="w-full p-4 bg-stone-50 border border-stone-200 focus:ring-2 focus:ring-accent outline-none text-primary" />
+                  </div>
+                  <input name="phone" type="tel" placeholder="Phone Number" className="w-full p-4 bg-stone-50 border border-stone-200 focus:ring-2 focus:ring-accent outline-none text-primary" />
+                  <textarea name="notes" required placeholder="Tell us why you'd like to join..." className="w-full p-4 bg-stone-50 border border-stone-200 focus:ring-2 focus:ring-accent outline-none text-primary h-32" />
+                  <div className="flex gap-4">
+                    <button type="submit" className="flex-1 bg-accent text-white py-4 font-bold hover:bg-accent/90 transition-all shadow-lg shadow-accent/20">
+                      Submit Application
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDepartmentModalMode('details')}
+                      className="px-6 py-4 border border-stone-200 font-bold text-stone-500 hover:bg-stone-50 transition-all"
+                    >
+                      Back
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </Modal>
 
       {/* Upcoming Events Section - Spread Wide */}
       <section id="events-grid" className="w-full px-8 md:px-16 py-32 bg-white border-t-2 border-stone-200">
@@ -966,27 +1224,51 @@ export default function Home() {
           <div className="bg-white p-12 md:p-24 flex flex-col justify-center">
             <div className="max-w-xl mx-auto lg:mx-0 w-full">
               <h3 className="text-3xl font-serif font-bold text-primary mb-10">Let us know you're coming</h3>
-              <form className="space-y-6">
+              <form
+                className="space-y-6"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const form = e.target as HTMLFormElement;
+                  const data = new FormData(form);
+                  try {
+                    const { error } = await supabase.from('visit_requests').insert({
+                      first_name: data.get('first_name'),
+                      last_name: data.get('last_name'),
+                      email: data.get('email'),
+                      phone: data.get('phone'),
+                      visit_date: data.get('visit_date'),
+                      people_count: Number(data.get('people_count') || 1),
+                      notes: data.get('notes'),
+                    });
+                    if (error) throw error;
+                    alert("Thanks for letting us know you're coming!");
+                    form.reset();
+                  } catch (error) {
+                    console.error('Error submitting visit request:', error);
+                    alert('Failed to submit visit request.');
+                  }
+                }}
+              >
                 <div className="grid grid-cols-2 gap-6">
-                  <input required type="text" placeholder="First Name" className="w-full p-5 bg-stone-50 border border-stone-200 focus:ring-2 focus:ring-accent outline-none text-primary" />
-                  <input required type="text" placeholder="Last Name" className="w-full p-5 bg-stone-50 border border-stone-200 focus:ring-2 focus:ring-accent outline-none text-primary" />
+                  <input required name="first_name" type="text" placeholder="First Name" className="w-full p-5 bg-stone-50 border border-stone-200 focus:ring-2 focus:ring-accent outline-none text-primary" />
+                  <input required name="last_name" type="text" placeholder="Last Name" className="w-full p-5 bg-stone-50 border border-stone-200 focus:ring-2 focus:ring-accent outline-none text-primary" />
                 </div>
                 <div className="grid grid-cols-2 gap-6">
-                  <input required type="email" placeholder="Email Address" className="w-full p-5 bg-stone-50 border border-stone-200 focus:ring-2 focus:ring-accent outline-none text-primary" />
-                  <input required type="tel" placeholder="Phone Number" className="w-full p-5 bg-stone-50 border border-stone-200 focus:ring-2 focus:ring-accent outline-none text-primary" />
+                  <input required name="email" type="email" placeholder="Email Address" className="w-full p-5 bg-stone-50 border border-stone-200 focus:ring-2 focus:ring-accent outline-none text-primary" />
+                  <input required name="phone" type="tel" placeholder="Phone Number" className="w-full p-5 bg-stone-50 border border-stone-200 focus:ring-2 focus:ring-accent outline-none text-primary" />
                 </div>
                 <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest ml-1">Date of Visit</label>
-                    <input required type="date" className="w-full p-5 bg-stone-50 border border-stone-200 focus:ring-2 focus:ring-accent outline-none text-primary" />
+                    <input required name="visit_date" type="date" className="w-full p-5 bg-stone-50 border border-stone-200 focus:ring-2 focus:ring-accent outline-none text-primary" />
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest ml-1">Number of People</label>
-                    <input required type="number" min="1" placeholder="1" className="w-full p-5 bg-stone-50 border border-stone-200 focus:ring-2 focus:ring-accent outline-none text-primary" />
+                    <input required name="people_count" type="number" min="1" placeholder="1" className="w-full p-5 bg-stone-50 border border-stone-200 focus:ring-2 focus:ring-accent outline-none text-primary" />
                   </div>
                 </div>
-                <textarea placeholder="Any special requirements or questions?" className="w-full p-5 bg-stone-50 border border-stone-200 focus:ring-2 focus:ring-accent outline-none text-primary h-32" />
-                <button className="w-full bg-accent text-white py-6 font-bold hover:bg-accent/90 transition-all shadow-xl shadow-accent/20 text-lg">
+                <textarea name="notes" placeholder="Any special requirements or questions?" className="w-full p-5 bg-stone-50 border border-stone-200 focus:ring-2 focus:ring-accent outline-none text-primary h-32" />
+                <button type="submit" className="w-full bg-accent text-white py-6 font-bold hover:bg-accent/90 transition-all shadow-xl shadow-accent/20 text-lg">
                   Schedule My Visit
                 </button>
               </form>
@@ -1051,13 +1333,28 @@ export default function Home() {
             e.preventDefault();
             const formData = new FormData(e.target as HTMLFormElement);
             try {
-              const { error } = await supabase.from('prayer_requests').insert({
-                full_name: formData.get('name'),
-                email: formData.get('email'),
-                message: formData.get('message'),
-                is_private: formData.get('private') === 'on'
-              });
-              if (error) throw error;
+              const prayerMessage = String(formData.get('message') || '').trim();
+              const prayerPayload = {
+                full_name: 'Anonymous',
+                email: 'anonymous@rccghopfam.local',
+                message: prayerMessage,
+                status: 'new',
+                is_private: formData.get('private') === 'on',
+              };
+
+              const { error } = await supabase.from('prayer_requests').insert(prayerPayload);
+              if (error) {
+                const message = String(error.message || error.details || '').toLowerCase();
+                if (!message.includes('full_name')) throw error;
+                const retry = await supabase.from('prayer_requests').insert({
+                  full_name: 'Anonymous',
+                  email: 'anonymous@rccghopfam.local',
+                  message: prayerMessage,
+                  status: 'new',
+                  is_private: formData.get('private') === 'on',
+                });
+                if (retry.error) throw retry.error;
+              }
               alert('Prayer request submitted. We are praying for you!');
               setActiveModal(null);
             } catch (error) {
@@ -1067,18 +1364,8 @@ export default function Home() {
           }}
           className="space-y-6"
         >
-          <div className="grid md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-stone-400 uppercase tracking-widest ml-1">Full Name</label>
-              <input required name="name" type="text" placeholder="John Doe" className="w-full p-5 rounded-xl bg-stone-50 border border-stone-200 focus:ring-2 focus:ring-accent outline-none text-primary" />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-stone-400 uppercase tracking-widest ml-1">Email Address</label>
-              <input required name="email" type="email" placeholder="john@example.com" className="w-full p-5 rounded-xl bg-stone-50 border border-stone-200 focus:ring-2 focus:ring-accent outline-none text-primary" />
-            </div>
-          </div>
           <div className="space-y-2">
-            <label className="text-xs font-bold text-stone-400 uppercase tracking-widest ml-1">Your Prayer Request</label>
+            <label className="text-xs font-bold text-stone-400 uppercase tracking-widest ml-1">Prayer Request</label>
             <textarea required name="message" placeholder="How can we pray for you today?" className="w-full p-5 rounded-xl bg-stone-50 border border-stone-200 focus:ring-2 focus:ring-accent outline-none text-primary h-32" />
           </div>
           <div className="flex items-center gap-3 p-4 bg-cream rounded-xl border border-accent/10">
@@ -1101,6 +1388,9 @@ export default function Home() {
             e.preventDefault();
             const formData = new FormData(e.target as HTMLFormElement);
             try {
+              const counselorName = String(formData.get('name') || '').trim() || 'Anonymous';
+              const counselorPhone = String(formData.get('phone') || '').trim();
+              const counselorReason = String(formData.get('reason') || '').trim();
               const preferredTimeRaw = formData.get('time');
               const preferredTimeIso =
                 typeof preferredTimeRaw === 'string' && preferredTimeRaw
@@ -1108,10 +1398,11 @@ export default function Home() {
                   : null;
 
               const { error } = await supabase.from('counseling_requests').insert({
-                full_name: formData.get('name'),
-                phone: formData.get('phone'),
-                reason: formData.get('reason'),
-                preferred_time: preferredTimeIso
+                full_name: counselorName,
+                phone: counselorPhone,
+                reason: counselorReason,
+                preferred_time: preferredTimeIso,
+                status: 'new',
               });
               if (error) throw error;
               alert('Counseling request submitted. We will contact you soon!');

@@ -2,14 +2,24 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Search, Shield, User2, XCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { AdminRole } from '../../types';
 
 type ProfileRow = {
   id: string;
   email: string;
   full_name: string | null;
-  role: 'admin' | 'member';
+  role: AdminRole;
   created_at: string;
 };
+
+const ROLE_OPTIONS: { value: AdminRole; label: string }[] = [
+  { value: 'admin', label: 'Admin' },
+  { value: 'editorial', label: 'Editorial' },
+  { value: 'prayer', label: 'Prayer Team' },
+  { value: 'counselor', label: 'Counselor' },
+  { value: 'follow_up', label: 'Follow Up' },
+  { value: 'member', label: 'Member' },
+];
 
 export default function AdminUsers() {
   const { user } = useAuth();
@@ -17,11 +27,21 @@ export default function AdminUsers() {
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [query, setQuery] = useState('');
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [currentRole, setCurrentRole] = useState<AdminRole>('member');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
     fetchProfiles();
   }, []);
+
+  useEffect(() => {
+    async function fetchRole() {
+      if (!user) return;
+      const { data } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
+      setCurrentRole(((data as any)?.role as AdminRole) || 'member');
+    }
+    fetchRole();
+  }, [user]);
 
   async function fetchProfiles() {
     setLoading(true);
@@ -47,7 +67,11 @@ export default function AdminUsers() {
     return profiles.filter((p) => (p.email || '').toLowerCase().includes(q) || (p.full_name || '').toLowerCase().includes(q));
   }, [profiles, query]);
 
-  async function setRole(profileId: string, role: 'admin' | 'member') {
+  async function setRole(profileId: string, role: AdminRole) {
+    if (currentRole !== 'admin') {
+      setMessage({ type: 'error', text: 'Only admin can promote or demote users.' });
+      return;
+    }
     setSavingId(profileId);
     setMessage(null);
     try {
@@ -66,7 +90,7 @@ export default function AdminUsers() {
     <div className="space-y-8">
       <div className="space-y-2">
         <h1 className="text-3xl font-serif font-bold text-primary tracking-tight">User Access</h1>
-        <p className="text-stone-500 text-sm font-light">Promote members to admins (so you don't have to use the Supabase dashboard).</p>
+        <p className="text-stone-500 text-sm font-light">Assign church roles from here so you don't have to use the Supabase dashboard.</p>
       </div>
 
       {message && (
@@ -149,25 +173,22 @@ export default function AdminUsers() {
                         {isSelf ? <p className="text-[10px] text-stone-400 mt-1 uppercase tracking-widest">You</p> : null}
                       </td>
                       <td className="py-4 text-right">
-                        {p.role === 'admin' ? (
-                          <button
-                            type="button"
-                            onClick={() => setRole(p.id, 'member')}
+                        {currentRole === 'admin' ? (
+                          <select
+                            value={p.role}
+                            onChange={(e) => setRole(p.id, e.target.value as AdminRole)}
                             disabled={savingId === p.id || isSelf}
-                            className="px-4 py-2 text-xs font-bold uppercase tracking-widest border border-stone-200 text-stone-700 hover:bg-stone-50 disabled:opacity-50"
-                            title={isSelf ? "You can't demote yourself from here" : 'Demote to member'}
+                            className="px-4 py-2 text-xs font-bold uppercase tracking-widest border border-stone-200 bg-white text-stone-700 disabled:opacity-50"
+                            title={isSelf ? "You can't change your own role from here" : 'Change user role'}
                           >
-                            Demote
-                          </button>
+                            {ROLE_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() => setRole(p.id, 'admin')}
-                            disabled={savingId === p.id}
-                            className="px-4 py-2 text-xs font-bold uppercase tracking-widest bg-primary text-white hover:bg-primary/90 disabled:opacity-50"
-                          >
-                            Make Admin
-                          </button>
+                          <span className="text-xs uppercase tracking-widest text-stone-400">Read only</span>
                         )}
                       </td>
                     </tr>
@@ -181,4 +202,3 @@ export default function AdminUsers() {
     </div>
   );
 }
-

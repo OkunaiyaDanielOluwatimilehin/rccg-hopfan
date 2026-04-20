@@ -5,6 +5,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { SiteSettings } from '../../types';
+import { getFirstAllowedPath, normalizeAdminRole } from '../../lib/adminAccess';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -29,8 +30,8 @@ export default function Login() {
     setError(null);
 
     try {
-      const { data: authData, error: signInError } = await signIn(email, password);
-      if (signInError) throw signInError;
+        const { data: authData, error: signInError } = await signIn(email, password);
+        if (signInError) throw signInError;
       
       if (authData.user) {
         // Check if user is admin
@@ -39,9 +40,15 @@ export default function Login() {
           .select('role')
           .eq('id', authData.user.id)
           .single();
-          
-        if (profile?.role === 'admin') {
-          navigate('/admin');
+
+        const { data: settingsData } = await supabase
+          .from('site_settings')
+          .select('role_permissions')
+          .maybeSingle();
+
+        const role = normalizeAdminRole(profile?.role);
+        if (role !== 'member') {
+          navigate(getFirstAllowedPath(role, (settingsData as any)?.role_permissions || null));
         } else {
           setError('Access denied. You do not have administrative privileges.');
           await signOut();

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { SiteSettings, Department, Leadership, GalleryItem, Devotional, NewsletterSubscription, ChurchEvent, GivingAccount } from '../../types';
+import { SiteSettings, Department, Leadership, GalleryItem, Devotional, NewsletterSubscription, ChurchEvent, GivingAccount, AdminRole, AdminSection, RolePermissions } from '../../types';
 import { Save, Plus, Trash2, Image as ImageIcon, Users, Clock, Info, Upload, Loader2, BookOpen, Mail, Calendar, Sparkles, ChevronUp, ChevronDown, Type, MapPin, Landmark } from 'lucide-react';
 import { motion } from 'motion/react';
 import { supabase } from '../../lib/supabase';
 import { uploadToR2ViaPresign, uploadToSupabasePublicBucket } from '../../services/uploadService';
 import MiniTextEditor from '../../components/MiniTextEditor';
+import { ADMIN_SECTIONS, DEFAULT_ROLE_PERMISSIONS, getRolePermissions } from '../../lib/adminAccess';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value: unknown): value is string => typeof value === 'string' && UUID_REGEX.test(value);
@@ -61,6 +62,29 @@ function normalizeGivingAccounts(accounts: GivingAccount[]) {
     .filter((account) => account.section || account.bank_name || account.account_name || account.account_number);
 }
 
+function readFeaturedDepartmentIds(settings: SiteSettings | null) {
+  return Array.isArray((settings as any)?.featured_department_ids)
+    ? ((settings as any).featured_department_ids as string[])
+    : [];
+}
+
+function readStringList(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || '').trim()).filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(/[\n,]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function normalizeRolePermissions(value?: RolePermissions | null): RolePermissions {
+  return getRolePermissions(value || DEFAULT_ROLE_PERMISSIONS);
+}
+
 type SettingsMode = 'overview' | 'content' | 'branding' | 'community';
 
 function resolveSettingsMode(pathname: string): SettingsMode {
@@ -87,8 +111,10 @@ function resolveSectionMode(title: string): SettingsMode {
       return 'branding';
     case 'Church Leadership':
     case 'Church Departments':
+    case 'Prayer & Teams':
     case 'Gallery Images':
     case 'Newsletter Subscribers':
+    case 'Access Matrix':
       return 'community';
     default:
       return 'overview';
@@ -440,6 +466,14 @@ export default function AdminSettings() {
         ui_font: (settings as any).ui_font ?? null,
         heading_font: (settings as any).heading_font ?? null,
         editorial_font: (settings as any).editorial_font ?? null,
+        featured_department_ids: readFeaturedDepartmentIds(settings),
+        featured_department_columns: Number((settings as any).featured_department_columns || 4),
+        featured_department_rows: Number((settings as any).featured_department_rows || 2),
+        prayer_team_members: Array.isArray((settings as any).prayer_team_members) ? (settings as any).prayer_team_members : [],
+        counseling_team_members: Array.isArray((settings as any).counseling_team_members) ? (settings as any).counseling_team_members : [],
+        follow_up_team_members: Array.isArray((settings as any).follow_up_team_members) ? (settings as any).follow_up_team_members : [],
+        department_team_members: Array.isArray((settings as any).department_team_members) ? (settings as any).department_team_members : [],
+        role_permissions: normalizeRolePermissions((settings as any).role_permissions),
       };
 
       const { error: settingsError } = await supabase
@@ -451,10 +485,39 @@ export default function AdminSettings() {
           (msg.includes('schema cache') && msg.includes('giving_accounts')) ||
           msg.includes('column "giving_accounts"') ||
           msg.includes("Could not find the 'giving_accounts' column");
+        const missingFeaturedDepartments =
+          (msg.includes('schema cache') && msg.includes('featured_department_ids')) ||
+          msg.includes('column "featured_department_ids"') ||
+          msg.includes("Could not find the 'featured_department_ids' column");
+        const missingRolePermissions =
+          (msg.includes('schema cache') && msg.includes('role_permissions')) ||
+          msg.includes('column "role_permissions"') ||
+          msg.includes("Could not find the 'role_permissions' column");
+        const missingFeaturedLayout =
+          (msg.includes('schema cache') && msg.includes('featured_department_columns')) ||
+          msg.includes('column "featured_department_columns"') ||
+          msg.includes('column "featured_department_rows"');
+        const missingTeamLists =
+          (msg.includes('schema cache') && msg.includes('prayer_team_members')) ||
+          msg.includes('column "prayer_team_members"') ||
+          msg.includes('column "counseling_team_members"') ||
+          msg.includes('column "follow_up_team_members"') ||
+          msg.includes('column "department_team_members"');
 
-        if (!missingGivingAccounts) throw settingsError;
+        if (!missingGivingAccounts && !missingFeaturedDepartments && !missingRolePermissions && !missingFeaturedLayout && !missingTeamLists) throw settingsError;
 
-        const { giving_accounts: _ignoredGivingAccounts, ...fallbackPayload } = siteSettingsPayload as any;
+        const {
+          giving_accounts: _ignoredGivingAccounts,
+          featured_department_ids: _ignoredFeaturedDepartments,
+          featured_department_columns: _ignoredFeaturedDepartmentColumns,
+          featured_department_rows: _ignoredFeaturedDepartmentRows,
+          prayer_team_members: _ignoredPrayerTeamMembers,
+          counseling_team_members: _ignoredCounselingTeamMembers,
+          follow_up_team_members: _ignoredFollowUpTeamMembers,
+          department_team_members: _ignoredDepartmentTeamMembers,
+          role_permissions: _ignoredRolePermissions,
+          ...fallbackPayload
+        } = siteSettingsPayload as any;
 
         const { error: fallbackError } = await supabase
           .from('site_settings')
@@ -581,8 +644,34 @@ export default function AdminSettings() {
   };
 
   const handleAddDepartment = () => {
-    const newDept = { id: `tmp-${Date.now()}`, name: 'New Department', description: 'Description', icon: 'Users' } as Department;
+    const newDept = { id: crypto.randomUUID(), name: 'New Department', description: 'Description', icon: 'Users' } as Department;
     setDepartments([...departments, newDept]);
+  };
+
+  const toggleFeaturedDepartment = (departmentId: string) => {
+    setSettings((prev) => {
+      if (!prev) return null;
+      const current = Array.isArray((prev as any).featured_department_ids) ? [...(prev as any).featured_department_ids] : [];
+      const next = current.includes(departmentId)
+        ? current.filter((id) => id !== departmentId)
+        : [...current, departmentId];
+      return { ...prev, featured_department_ids: next } as any;
+    });
+  };
+
+  const toggleRolePermission = (role: AdminRole, section: AdminSection) => {
+    setSettings((prev) => {
+      if (!prev) return null;
+      const current = normalizeRolePermissions((prev as any).role_permissions);
+      const next = {
+        ...current,
+        [role]: {
+          ...(current[role] || {}),
+          [section]: !current[role]?.[section],
+        },
+      } as RolePermissions;
+      return { ...prev, role_permissions: next } as any;
+    });
   };
 
   const handleDeleteDepartment = async (id: string) => {
@@ -703,6 +792,15 @@ export default function AdminSettings() {
   const uiFontSelect = Object.prototype.hasOwnProperty.call(FONT_OPTIONS, uiFontValue) ? uiFontValue : 'custom';
   const headingFontSelect = Object.prototype.hasOwnProperty.call(FONT_OPTIONS, headingFontValue) ? headingFontValue : 'custom';
   const editorialFontSelect = Object.prototype.hasOwnProperty.call(FONT_OPTIONS, editorialFontValue) ? editorialFontValue : 'custom';
+  const featuredDepartmentIds = readFeaturedDepartmentIds(settings);
+  const featuredDepartmentColumnsValue = Math.max(1, Number((settings as any)?.featured_department_columns || 4));
+  const featuredDepartmentRowsValue = Math.max(1, Number((settings as any)?.featured_department_rows || 2));
+  const featuredDepartmentCapacity = featuredDepartmentColumnsValue * featuredDepartmentRowsValue;
+  const prayerTeamMembers = readStringList((settings as any)?.prayer_team_members);
+  const counselingTeamMembers = readStringList((settings as any)?.counseling_team_members);
+  const followUpTeamMembers = readStringList((settings as any)?.follow_up_team_members);
+  const departmentTeamMembers = readStringList((settings as any)?.department_team_members);
+  const rolePermissions = normalizeRolePermissions((settings as any)?.role_permissions);
   const settingsMode = resolveSettingsMode(location.pathname);
   const settingsNav = settingsMode === 'overview'
     ? [
@@ -728,6 +826,7 @@ export default function AdminSettings() {
             { id: 'church-departments', label: 'Departments' },
           { id: 'gallery-images', label: 'Gallery' },
           { id: 'newsletter-subscribers', label: 'Newsletter' },
+          { id: 'access-matrix', label: 'Access Matrix' },
         ];
 
   const SectionSaveButton = ({ label = 'Save Changes' }: { label?: string }) => (
@@ -1714,6 +1813,51 @@ export default function AdminSettings() {
             <Plus className="w-4 h-4" /> Add Department
           </button>
         </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 border border-stone-200 bg-stone-50/80">
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-stone-500">Home Matrix Preset</label>
+            <select
+              value={`${featuredDepartmentColumnsValue}x${featuredDepartmentRowsValue}`}
+              onChange={(e) => {
+                const [cols, rows] = e.target.value.split('x').map((v) => Number(v));
+                setSettings(prev => prev ? { ...prev, featured_department_columns: cols, featured_department_rows: rows } : null);
+              }}
+              className="w-full p-3 border border-stone-200 bg-white focus:outline-none focus:ring-4 focus:ring-accent/10"
+            >
+              <option value="2x4">2 x 4</option>
+              <option value="4x2">4 x 2</option>
+              <option value="3x3">3 x 3</option>
+              <option value="4x4">4 x 4</option>
+              <option value="5x2">5 x 2</option>
+              <option value="6x2">6 x 2</option>
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-stone-500">Columns</label>
+            <input
+              type="number"
+              min={1}
+              max={8}
+              value={featuredDepartmentColumnsValue}
+              onChange={(e) => setSettings(prev => prev ? { ...prev, featured_department_columns: Number(e.target.value || 1) } : null)}
+              className="w-full p-3 border border-stone-200 bg-white focus:outline-none focus:ring-4 focus:ring-accent/10"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-stone-500">Rows</label>
+            <input
+              type="number"
+              min={1}
+              max={8}
+              value={featuredDepartmentRowsValue}
+              onChange={(e) => setSettings(prev => prev ? { ...prev, featured_department_rows: Number(e.target.value || 1) } : null)}
+              className="w-full p-3 border border-stone-200 bg-white focus:outline-none focus:ring-4 focus:ring-accent/10"
+            />
+          </div>
+        </div>
+        <p className="text-xs text-stone-500 mt-3">
+          Home preview capacity: {featuredDepartmentColumnsValue} columns by {featuredDepartmentRowsValue} rows = {featuredDepartmentCapacity} cards.
+        </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {departments.map((dept, index) => (
             <div key={dept.id} className="p-6 border border-stone-100 space-y-4 relative group bg-stone-50/30">
@@ -1765,6 +1909,15 @@ export default function AdminSettings() {
                     placeholder="Image URL"
                     className="w-full text-xs text-stone-400 outline-none border-b border-transparent focus:border-accent bg-transparent"
                   />
+                  <label className="inline-flex items-center gap-3 text-xs font-bold uppercase tracking-widest text-stone-500 pt-2">
+                    <input
+                      type="checkbox"
+                      checked={featuredDepartmentIds.includes(dept.id)}
+                      onChange={() => toggleFeaturedDepartment(dept.id)}
+                      className="w-4 h-4 accent-accent"
+                    />
+                    Show on home page
+                  </label>
                 </div>
               </div>
               <textarea
@@ -1779,6 +1932,60 @@ export default function AdminSettings() {
             </div>
           ))}
         </div>
+      </CollapsiblePanel>
+
+      {/* Prayer & Teams */}
+      <CollapsiblePanel
+        id="prayer-teams"
+        title="Prayer & Teams"
+        description="Configure who can receive forwarded prayer, counseling, and follow-up items."
+      >
+        <SectionSaveButton label="Save Team Members" />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="space-y-3">
+            <label className="text-sm font-bold text-stone-700 uppercase tracking-widest">Prayer Team Members</label>
+            <textarea
+              value={prayerTeamMembers.join('\n')}
+              onChange={(e) => setSettings(prev => prev ? { ...prev, prayer_team_members: readStringList(e.target.value) } : null)}
+              rows={8}
+              className="w-full p-4 border border-stone-200 focus:ring-4 focus:ring-accent/10 outline-none transition-all resize-y"
+              placeholder="Person A&#10;Person B&#10;Person C"
+            />
+          </div>
+          <div className="space-y-3">
+            <label className="text-sm font-bold text-stone-700 uppercase tracking-widest">Counseling Team Members</label>
+            <textarea
+              value={counselingTeamMembers.join('\n')}
+              onChange={(e) => setSettings(prev => prev ? { ...prev, counseling_team_members: readStringList(e.target.value) } : null)}
+              rows={8}
+              className="w-full p-4 border border-stone-200 focus:ring-4 focus:ring-accent/10 outline-none transition-all resize-y"
+              placeholder="Counselor A&#10;Counselor B"
+            />
+          </div>
+          <div className="space-y-3">
+            <label className="text-sm font-bold text-stone-700 uppercase tracking-widest">Follow Up Team Members</label>
+            <textarea
+              value={followUpTeamMembers.join('\n')}
+              onChange={(e) => setSettings(prev => prev ? { ...prev, follow_up_team_members: readStringList(e.target.value) } : null)}
+              rows={8}
+              className="w-full p-4 border border-stone-200 focus:ring-4 focus:ring-accent/10 outline-none transition-all resize-y"
+              placeholder="Follow Up A&#10;Follow Up B"
+            />
+          </div>
+          <div className="space-y-3">
+            <label className="text-sm font-bold text-stone-700 uppercase tracking-widest">Department Team Members</label>
+            <textarea
+              value={departmentTeamMembers.join('\n')}
+              onChange={(e) => setSettings(prev => prev ? { ...prev, department_team_members: readStringList(e.target.value) } : null)}
+              rows={8}
+              className="w-full p-4 border border-stone-200 focus:ring-4 focus:ring-accent/10 outline-none transition-all resize-y"
+              placeholder="Department Lead A&#10;Department Lead B"
+            />
+          </div>
+        </div>
+        <p className="text-xs text-stone-500 mt-3">
+          These names appear in the admin inbox when you forward or tag an entry to a person.
+        </p>
       </CollapsiblePanel>
 
       {/* Gallery */}
@@ -1901,7 +2108,63 @@ export default function AdminSettings() {
                 <tr>
                   <td colSpan={3} className="py-12 text-center text-stone-400 italic text-lg">No subscribers yet</td>
                 </tr>
-              )}
+          )}
+        </tbody>
+      </table>
+    </div>
+  </CollapsiblePanel>
+
+      {/* Access Matrix */}
+      <CollapsiblePanel
+        id="access-matrix"
+        title="Access Matrix"
+        description="Configure which admin roles can access each area of the dashboard."
+      >
+        <SectionSaveButton label="Save Access Matrix" />
+        <p className="text-sm text-stone-500 max-w-4xl mb-6">
+          This matrix is saved in the backend so you can change role access without editing code. Admin stays fully open by default.
+        </p>
+        <div className="overflow-x-auto border border-stone-200 bg-white">
+          <table className="min-w-[1100px] w-full text-sm">
+            <thead className="bg-stone-50">
+              <tr className="text-left">
+                <th className="p-4 font-bold text-stone-500 uppercase tracking-widest text-[10px]">Role</th>
+                {ADMIN_SECTIONS.map((section) => (
+                  <th key={section} className="p-4 font-bold text-stone-500 uppercase tracking-widest text-[10px] whitespace-nowrap">
+                    {section.replace(/_/g, ' ')}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-stone-100">
+              {([
+                ['admin', 'Admin'],
+                ['editorial', 'Editorial'],
+                ['prayer', 'Prayer'],
+                ['counselor', 'Counselor'],
+                ['follow_up', 'Follow Up'],
+                ['member', 'Member'],
+              ] as Array<[AdminRole, string]>).map(([role, label]) => (
+                <tr key={role} className="hover:bg-stone-50/70">
+                  <td className="p-4 font-bold text-primary whitespace-nowrap">{label}</td>
+                  {ADMIN_SECTIONS.map((section) => (
+                    <td key={`${role}-${section}`} className="p-4">
+                      <label className="inline-flex items-center gap-3 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={rolePermissions[role]?.[section] ?? false}
+                          onChange={() => toggleRolePermission(role, section)}
+                          disabled={role === 'admin'}
+                          className="w-4 h-4 accent-accent disabled:opacity-60"
+                        />
+                        <span className="text-xs text-stone-500 uppercase tracking-widest">
+                          {rolePermissions[role]?.[section] ? 'Yes' : 'No'}
+                        </span>
+                      </label>
+                    </td>
+                  ))}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

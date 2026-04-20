@@ -4,6 +4,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import ScrollToTop from './components/ScrollToTop';
 import Layout from './components/Layout';
 import Home from './pages/Home';
+import Live from './pages/Live';
 import About from './pages/About';
 import Gallery from './pages/Gallery';
 import Serve from './pages/Serve';
@@ -14,6 +15,7 @@ import AdminLogin from './pages/Admin/Login';
 import AdminRegister from './pages/Admin/Register';
 import AdminDashboardLayout from './pages/Admin/DashboardLayout';
 import AdminOverview from './pages/Admin/Overview';
+import AdminLive from './pages/Admin/Live';
 import AdminPosts from './pages/Admin/Posts';
 import AdminSermons from './pages/Admin/Sermons';
 import AdminDevotionals from './pages/Admin/Devotionals';
@@ -21,6 +23,11 @@ import AdminEvents from './pages/Admin/Events';
 import AdminTestimonials from './pages/Admin/Testimonials';
 import AdminSettings from './pages/Admin/Settings';
 import AdminUsers from './pages/Admin/Users';
+import AdminNotifications from './pages/Admin/Notifications';
+import AdminPrayerRequests from './pages/Admin/PrayerRequests';
+import AdminCounselingRequests from './pages/Admin/CounselingRequests';
+import AdminFollowUp from './pages/Admin/FollowUp';
+import AdminDepartmentRequests from './pages/Admin/DepartmentRequests';
 
 import Editorial from './pages/Editorial';
 import PostDetail from './pages/PostDetail';
@@ -49,6 +56,7 @@ export default function App() {
           {/* Public Routes */}
           <Route path="/" element={<Layout />}>
             <Route index element={<Home />} />
+            <Route path="live" element={<Live />} />
             <Route path="about" element={<About />} />
             <Route path="gallery" element={<Gallery />} />
             <Route path="serve" element={<Serve />} />
@@ -74,12 +82,18 @@ export default function App() {
           <Route path="/admin/register" element={<AdminRegister />} />
           <Route path="/admin" element={<AdminDashboardLayout />}>
             <Route index element={<AdminOverview />} />
+            <Route path="live" element={<AdminLive />} />
             <Route path="posts" element={<AdminPosts />} />
             <Route path="sermons" element={<AdminSermons />} />
             <Route path="devotionals" element={<AdminDevotionals />} />
             <Route path="events" element={<AdminEvents />} />
             <Route path="testimonials" element={<AdminTestimonials />} />
             <Route path="users" element={<AdminUsers />} />
+            <Route path="notifications" element={<AdminNotifications />} />
+            <Route path="prayer-requests" element={<AdminPrayerRequests />} />
+            <Route path="counseling-requests" element={<AdminCounselingRequests />} />
+            <Route path="follow-up" element={<AdminFollowUp />} />
+            <Route path="department-requests" element={<AdminDepartmentRequests />} />
             <Route path="settings" element={<AdminSettings />} />
             <Route path="settings/content" element={<AdminSettings />} />
             <Route path="settings/branding" element={<AdminSettings />} />
