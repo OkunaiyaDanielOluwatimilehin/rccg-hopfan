@@ -34,13 +34,13 @@ export default function Navbar() {
       ? location.pathname === path
       : location.pathname === path.pathname && location.hash === path.hash;
 
-  const navGroups = [
+  type NavPath = string | { pathname: string; hash?: string };
+  type NavGroup =
+    | { name: string; path: NavPath; accent?: boolean }
+    | { name: string; items: Array<{ name: string; path: NavPath }>; accent?: boolean };
+
+  const navGroups: NavGroup[] = [
     { name: 'Home', path: '/' },
-    {
-      name: 'Live',
-      path: '/live',
-      accent: true,
-    },
     { name: 'Sermons', path: '/sermons' },
     {
       name: 'More',

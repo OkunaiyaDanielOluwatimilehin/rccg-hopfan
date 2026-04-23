@@ -14,7 +14,6 @@ import {
   CalendarDays,
   ClipboardList,
   Bell,
-  Radio,
 } from 'lucide-react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
@@ -50,7 +49,6 @@ export default function AdminDashboard() {
 
   const menuItems = [
     { name: 'Overview', path: '/admin', icon: LayoutDashboard, section: 'overview' as const },
-    { name: 'Live Stream', path: '/admin/live', icon: Radio, section: 'livestream' as const },
     { name: 'Notifications', path: '/admin/notifications', icon: Bell, section: 'notifications' as const },
     { name: 'Users', path: '/admin/users', icon: Users, section: 'users' as const },
     { name: 'Prayer Requests', path: '/admin/prayer-requests', icon: MessageSquare, section: 'prayer_requests' as const },
@@ -185,7 +183,7 @@ export default function AdminDashboard() {
   const visibleMenuItems = menuItems.filter((item) => canAccessSection(role, item.section, rolePermissions));
   const visibleContentItems = contentItems.filter((item) => canAccessSection(role, item.section, rolePermissions));
   const visibleSettingsItems = settingsItems.filter((item) => canAccessSection(role, item.section, rolePermissions));
-  const coreItems = visibleMenuItems.filter((item) => ['overview', 'notifications', 'users', 'livestream'].includes(item.section));
+  const coreItems = visibleMenuItems.filter((item) => ['overview', 'notifications', 'users'].includes(item.section));
   const requestItems = visibleMenuItems.filter((item) => ['prayer_requests', 'counseling_requests', 'follow_up', 'department_requests'].includes(item.section));
   const contentNavItems = visibleContentItems;
   const settingsNavItems = visibleSettingsItems;

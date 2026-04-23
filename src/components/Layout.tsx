@@ -4,7 +4,6 @@ import Navbar from './Navbar';
 import { Mail, MapPin } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { SiteSettings } from '../types';
-import LiveStreamBanner from './LiveStreamBanner';
 
 export default function Layout() {
   const [settings, setSettings] = useState<SiteSettings | null>(null);
@@ -24,7 +23,6 @@ export default function Layout() {
   return (
     <div className="min-h-screen flex flex-col overflow-x-hidden">
       <Navbar />
-      <LiveStreamBanner />
       <main className="flex-grow">
         <Outlet />
       </main>

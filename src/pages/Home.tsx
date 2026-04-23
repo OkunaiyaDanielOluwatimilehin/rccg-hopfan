@@ -8,9 +8,6 @@ import Modal from '../components/Modal';
 import { supabase } from '../lib/supabase';
 import MarkdownContent from '../components/MarkdownContent';
 import Seo from '../components/Seo';
-import { fetchCurrentLiveStream, fetchLatestLiveAnnouncement, getViewerPlaybackUrl, isActiveLiveStream, subscribeToLiveStreamChanges } from '../lib/liveStream';
-import type { LiveAnnouncement, LiveStream } from '../types';
-import LiveStreamPlayer from '../components/LiveStreamPlayer';
 
 function formatHeroTitle(title: string) {
   return title
@@ -58,8 +55,6 @@ export default function Home() {
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
   const [events, setEvents] = useState<ChurchEvent[]>([]);
   const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
-  const [liveStream, setLiveStream] = useState<LiveStream | null>(null);
-  const [liveAnnouncement, setLiveAnnouncement] = useState<LiveAnnouncement | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -120,38 +115,6 @@ export default function Home() {
     fetchAllData();
   }, []);
 
-  useEffect(() => {
-    let disposed = false;
-
-    const loadLive = async () => {
-      try {
-        const [streamRes, announcementRes] = await Promise.all([fetchCurrentLiveStream(), fetchLatestLiveAnnouncement()]);
-        if (disposed) return;
-        setLiveStream((streamRes.data as LiveStream | null) || null);
-        setLiveAnnouncement((announcementRes.data as LiveAnnouncement | null) || null);
-      } catch (error) {
-        console.error('Error loading live stream on home:', error);
-      }
-    };
-
-    loadLive();
-
-    const unsubscribe = subscribeToLiveStreamChanges(async () => {
-      try {
-        const [streamRes, announcementRes] = await Promise.all([fetchCurrentLiveStream(), fetchLatestLiveAnnouncement()]);
-        if (disposed) return;
-        setLiveStream((streamRes.data as LiveStream | null) || null);
-        setLiveAnnouncement((announcementRes.data as LiveAnnouncement | null) || null);
-      } catch (error) {
-        console.error('Error refreshing live stream on home:', error);
-      }
-    });
-
-    return () => {
-      disposed = true;
-      unsubscribe();
-    };
-  }, []);
 
   // Default values if settings are not yet in DB
   const heroTitle = settings?.hero_title || '';
@@ -210,9 +173,6 @@ export default function Home() {
       .sort((a, b) => (order.get(a.id) || 0) - (order.get(b.id) || 0))
       .slice(0, featuredDepartmentLimit);
   }, [departments, featuredDepartmentIds.join('|'), featuredDepartmentLimit]);
-
-  const liveIsActive = isActiveLiveStream(liveStream);
-  const livePlaybackUrl = getViewerPlaybackUrl(liveStream);
 
   useEffect(() => {
     if (heroImages.length < 2) return;
@@ -333,11 +293,17 @@ export default function Home() {
   };
 
   const scroll = (direction: 'left' | 'right') => {
-    if (scrollRef.current) {
-      const { scrollLeft, clientWidth } = scrollRef.current;
-      const scrollTo = direction === 'left' ? scrollLeft - clientWidth : scrollLeft + clientWidth;
-      scrollRef.current.scrollTo({ left: scrollTo, behavior: 'smooth' });
-    }
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const firstCard = container.firstElementChild as HTMLElement | null;
+    const computed = window.getComputedStyle(container);
+    const gapRaw = computed.columnGap || (computed as any).gap || '0px';
+    const gap = Number.parseFloat(gapRaw) || 0;
+    const step = (firstCard?.getBoundingClientRect().width || container.clientWidth) + gap;
+    const next = direction === 'left' ? container.scrollLeft - step : container.scrollLeft + step;
+
+    container.scrollTo({ left: next, behavior: 'smooth' });
   };
 
   return (
@@ -406,73 +372,10 @@ export default function Home() {
             >
               Recent Sermons
             </Link>
-            <Link
-              to="/live"
-              className="bg-rose-600 hover:bg-rose-500 text-white px-10 py-4 font-bold flex items-center justify-center gap-3 transition-all shadow-xl shadow-rose-600/20 w-full sm:w-auto"
-            >
-              <span className="inline-flex h-2.5 w-2.5 rounded-full bg-white animate-pulse" />
-              Watch Live
-            </Link>
           </motion.div>
           </div>
         </div>
 
-      </section>
-
-      <section className="w-full px-4 sm:px-8 md:px-16">
-        <div className={`relative overflow-hidden border ${liveIsActive ? 'border-rose-200 bg-gradient-to-r from-rose-50 via-white to-amber-50' : 'border-stone-200 bg-white'} shadow-lg`}>
-          <div className="grid gap-0 lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,1fr)]">
-            <div className="p-8 sm:p-12 lg:p-16">
-              <div className="inline-flex items-center gap-2 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.35em] border border-stone-200 bg-white text-stone-600">
-                {liveIsActive ? 'Live Now' : 'Livestream'}
-              </div>
-              <h2 className="mt-5 text-3xl sm:text-4xl lg:text-6xl font-serif font-bold text-primary tracking-tight">
-                {liveStream?.title || 'Join the church livestream'}
-              </h2>
-              <p className="mt-4 text-stone-600 text-base sm:text-lg leading-relaxed max-w-2xl">
-                {liveAnnouncement?.body || liveStream?.description || 'Watch the service live from anywhere and stay connected through the stream.'}
-              </p>
-              <div className="mt-8 flex flex-wrap gap-3">
-                <Link
-                  to="/live"
-                  className="inline-flex items-center gap-2 px-5 py-3 text-xs font-bold uppercase tracking-widest bg-primary text-white hover:bg-primary/90 transition-colors"
-                >
-                  Open Live Page
-                  <ArrowRight className="w-4 h-4" />
-                </Link>
-                <Link
-                  to="/events"
-                  className="inline-flex items-center gap-2 px-5 py-3 text-xs font-bold uppercase tracking-widest border border-stone-200 text-stone-600 hover:border-primary hover:text-primary transition-colors bg-white"
-                >
-                  View Events
-                </Link>
-              </div>
-            </div>
-            <div className="relative min-h-[260px] lg:min-h-full bg-primary">
-              {livePlaybackUrl && liveIsActive ? (
-                <LiveStreamPlayer
-                  playbackUrl={livePlaybackUrl}
-                  title={liveStream?.title || 'Live stream'}
-                  muted={true}
-                  className="w-full h-full min-h-[260px] lg:min-h-[420px]"
-                />
-              ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-8 text-white">
-                  <p className="text-xs font-bold uppercase tracking-[0.35em] text-white/50">No live broadcast yet</p>
-                  <p className="mt-3 max-w-sm text-sm sm:text-base text-white/75 leading-relaxed">
-                    When the stream goes live, the player will appear here automatically.
-                  </p>
-                  <Link
-                    to="/live"
-                    className="mt-6 inline-flex items-center gap-2 px-5 py-3 text-xs font-bold uppercase tracking-widest bg-white text-primary hover:bg-stone-100 transition-colors"
-                  >
-                    Go to Live
-                  </Link>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
       </section>
 
       {/* Event Carousel */}
@@ -527,21 +430,20 @@ export default function Home() {
 
       {/* Pastor's Welcome Section - Full Width 50/50 */}
       <section className="w-full overflow-hidden bg-white">
-        <div className="flex flex-col lg:flex-row lg:min-h-[600px]">
+        <div className="flex flex-col lg:flex-row lg:items-start">
           <div className="hidden lg:block lg:w-1/2 relative">
             {settings?.pastor_image_url ? (
               <img
                 src={settings.pastor_image_url}
                 alt="Pastor"
-                className="absolute inset-0 w-full h-full object-cover"
+                className="block w-full h-auto"
                 referrerPolicy="no-referrer"
               />
             ) : (
-              <div className="absolute inset-0 w-full h-full bg-gradient-to-br from-primary/30 via-stone-100 to-accent/10" />
+              <div className="w-full aspect-[4/3] bg-white" />
             )}
-            <div className="absolute inset-0 bg-primary/20" />
           </div>
-          <div className="w-full lg:w-1/2 p-8 sm:p-12 md:p-24 flex flex-col justify-center bg-cream relative">
+          <div className="w-full lg:w-1/2 p-8 sm:p-12 md:p-24 flex flex-col justify-center bg-white relative">
             <div className="max-w-xl mx-auto lg:mx-0 space-y-6 sm:space-y-10">
               <div className="w-16 h-16 sm:w-20 sm:h-20 bg-accent flex items-center justify-center shadow-xl mb-6 sm:mb-10">
                 <Heart className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
@@ -572,13 +474,12 @@ export default function Home() {
                 )}
               </div>
             </div>
-            <div className="absolute top-0 right-0 w-32 h-32 sm:w-64 sm:h-64 bg-accent/5 rounded-full blur-3xl -mr-16 -mt-16 sm:-mr-32 sm:-mt-32" />
           </div>
         </div>
       </section>
 
       {/* Leadership Section - Meet the Team */}
-      <section className="bg-white py-12 sm:py-28 border-t-2 border-stone-200">
+      <section className="bg-white py-12 sm:py-28">
         <div className="w-full px-4 sm:px-8 md:px-16">
           <div className="text-center max-w-4xl mx-auto mb-10 sm:mb-16 space-y-4 sm:space-y-6">
             <div className="inline-block bg-primary text-white px-4 py-1.5 sm:px-6 sm:py-2 text-xs sm:text-sm font-bold uppercase tracking-widest">
@@ -603,18 +504,18 @@ export default function Home() {
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true }}
                     transition={{ delay: idx * 0.05 }}
-                    className="min-w-[220px] sm:min-w-[360px] md:min-w-[420px] snap-center group"
+                    className="min-w-[220px] sm:min-w-[360px] md:min-w-[420px] snap-start group"
                   >
-                    <div className="relative aspect-[4/5] sm:aspect-square overflow-hidden border border-stone-200 bg-stone-50 shadow-xl">
+                    <div className="relative overflow-hidden bg-white">
                       {leader.image_url ? (
                         <img
                           src={leader.image_url}
                           alt={leader.name}
-                          className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000"
+                          className="block w-full h-auto group-hover:scale-105 transition-transform duration-1000"
                           referrerPolicy="no-referrer"
                         />
                       ) : (
-                        <div className="absolute inset-0 w-full h-full bg-gradient-to-br from-stone-100 via-white to-stone-200" />
+                        <div className="w-full aspect-square bg-white" />
                       )}
 
                       <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-primary/90 via-primary/30 to-transparent" />

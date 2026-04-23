@@ -239,7 +239,9 @@ export default function AdminSettings() {
 
     setUploading(true);
     try {
-      const timestampedName = `${Date.now()}-${file.name}`.replace(/\s+/g, '_');
+      const normalizedName = file.name.normalize('NFKD');
+      const safeName = normalizedName.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '') || `upload-${Date.now()}`;
+      const timestampedName = `${Date.now()}-${safeName}`.slice(0, 160);
 
       const publicUrl =
         type === 'gallery'
@@ -312,7 +314,9 @@ export default function AdminSettings() {
 
     setUploading(true);
     try {
-      const timestampedName = `${Date.now()}-${file.name}`.replace(/\s+/g, '_');
+      const normalizedName = file.name.normalize('NFKD');
+      const safeName = normalizedName.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '') || `upload-${Date.now()}`;
+      const timestampedName = `${Date.now()}-${safeName}`.slice(0, 160);
       const publicUrl = await uploadToSupabasePublicBucket({
         bucket: 'site-images',
         file,
@@ -1524,11 +1528,11 @@ export default function AdminSettings() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div className="space-y-3">
             <label className="text-sm font-bold text-stone-700 uppercase tracking-widest">Pastor Image</label>
-            <div className="aspect-square border border-stone-200 bg-stone-50 overflow-hidden relative group">
+            <div className="border border-stone-200 bg-stone-50 overflow-hidden relative group">
               {settings?.pastor_image_url ? (
-                <img src={settings.pastor_image_url} alt="Pastor" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                <img src={settings.pastor_image_url} alt="Pastor" className="block w-full h-auto" referrerPolicy="no-referrer" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-stone-300">
+                <div className="w-full aspect-square flex items-center justify-center text-stone-300">
                   <ImageIcon className="w-12 h-12" />
                 </div>
               )}
@@ -1736,11 +1740,11 @@ export default function AdminSettings() {
                 <Trash2 className="w-5 h-5" />
               </button>
               <div className="flex gap-3">
-                <div className="w-16 h-16 bg-stone-100 border border-stone-200 flex-shrink-0 overflow-hidden relative group/img">
+                <div className="bg-stone-100 border border-stone-200 flex-shrink-0 overflow-hidden relative group/img">
                   {leader.image_url ? (
-                    <img src={leader.image_url} alt="Leader Preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    <img src={leader.image_url} alt="Leader Preview" className="block w-auto h-auto max-w-[140px]" referrerPolicy="no-referrer" />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-stone-300">
+                    <div className="w-16 h-16 flex items-center justify-center text-stone-300">
                       <ImageIcon className="w-6 h-6" />
                     </div>
                   )}

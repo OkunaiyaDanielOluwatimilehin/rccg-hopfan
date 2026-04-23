@@ -4,7 +4,6 @@ import { AuthProvider } from './contexts/AuthContext';
 import ScrollToTop from './components/ScrollToTop';
 import Layout from './components/Layout';
 import Home from './pages/Home';
-import Live from './pages/Live';
 import About from './pages/About';
 import Gallery from './pages/Gallery';
 import Serve from './pages/Serve';
@@ -15,7 +14,6 @@ import AdminLogin from './pages/Admin/Login';
 import AdminRegister from './pages/Admin/Register';
 import AdminDashboardLayout from './pages/Admin/DashboardLayout';
 import AdminOverview from './pages/Admin/Overview';
-import AdminLive from './pages/Admin/Live';
 import AdminPosts from './pages/Admin/Posts';
 import AdminSermons from './pages/Admin/Sermons';
 import AdminDevotionals from './pages/Admin/Devotionals';
@@ -56,7 +54,6 @@ export default function App() {
           {/* Public Routes */}
           <Route path="/" element={<Layout />}>
             <Route index element={<Home />} />
-            <Route path="live" element={<Live />} />
             <Route path="about" element={<About />} />
             <Route path="gallery" element={<Gallery />} />
             <Route path="serve" element={<Serve />} />
@@ -82,7 +79,6 @@ export default function App() {
           <Route path="/admin/register" element={<AdminRegister />} />
           <Route path="/admin" element={<AdminDashboardLayout />}>
             <Route index element={<AdminOverview />} />
-            <Route path="live" element={<AdminLive />} />
             <Route path="posts" element={<AdminPosts />} />
             <Route path="sermons" element={<AdminSermons />} />
             <Route path="devotionals" element={<AdminDevotionals />} />

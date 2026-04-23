@@ -5,7 +5,6 @@ import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { AdminRole } from '../../types';
-import type { LiveAnnouncement } from '../../types';
 
 type ProfileRow = {
   id: string;
@@ -59,19 +58,6 @@ type FeedItem =
       metadata: Record<string, unknown> | null;
       entity_type: string;
       actor_name: string;
-    }
-  | {
-      key: string;
-      source: 'live';
-      title: string;
-      body: string;
-      created_at: string;
-      read_at: null;
-      category: string;
-      path: string;
-      metadata: Record<string, unknown> | null;
-      status: string | null;
-      stream_id: string | null;
     };
 
 const FILTERS = ['all', 'unread', 'activity'] as const;
@@ -100,7 +86,6 @@ export default function AdminNotifications() {
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [requests, setRequests] = useState<RequestNotification[]>([]);
   const [activity, setActivity] = useState<ActivityLog[]>([]);
-  const [liveAnnouncements, setLiveAnnouncements] = useState<LiveAnnouncement[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -113,7 +98,7 @@ export default function AdminNotifications() {
       setLoading(true);
       setError(null);
       try {
-        const [profileRes, requestRes, activityRes, liveRes] = await Promise.all([
+        const [profileRes, requestRes, activityRes] = await Promise.all([
           supabase.from('profiles').select('id,role').eq('id', user.id).maybeSingle(),
           supabase
             .from('request_notifications')
@@ -125,29 +110,20 @@ export default function AdminNotifications() {
             .select('id,action,entity_type,entity_id,actor_name,title,body,created_at,metadata')
             .order('created_at', { ascending: false })
             .limit(50),
-          supabase
-            .from('live_announcements')
-            .select('id,stream_id,title,body,status,published_at,created_at,metadata')
-            .eq('status', 'live')
-            .order('published_at', { ascending: false })
-            .limit(20),
         ]);
 
         if (profileRes.error) throw profileRes.error;
         if (requestRes.error) throw requestRes.error;
         if (activityRes.error) throw activityRes.error;
-        if (liveRes.error) throw liveRes.error;
 
         setProfile((profileRes.data as ProfileRow) || null);
         setRequests((requestRes.data || []) as RequestNotification[]);
         setActivity((activityRes.data || []) as ActivityLog[]);
-        setLiveAnnouncements((liveRes.data || []) as LiveAnnouncement[]);
       } catch (fetchError: any) {
         console.error('Error loading notifications:', fetchError);
         setError(fetchError?.message || 'Could not load notifications.');
         setRequests([]);
         setActivity([]);
-        setLiveAnnouncements([]);
       } finally {
         setLoading(false);
       }
@@ -184,22 +160,8 @@ export default function AdminNotifications() {
       actor_name: item.actor_name,
     }));
 
-    const liveItems: FeedItem[] = liveAnnouncements.map((item) => ({
-      key: `live:${item.id}`,
-      source: 'live',
-      title: item.title,
-      body: item.body,
-      created_at: item.published_at || item.created_at || new Date().toISOString(),
-      read_at: null,
-      category: 'live stream',
-      path: '/live',
-      metadata: item.metadata,
-      status: item.status || null,
-      stream_id: item.stream_id || null,
-    }));
-
-    return [...requestItems, ...activityItems, ...liveItems].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  }, [activity, liveAnnouncements, requests]);
+    return [...requestItems, ...activityItems].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [activity, requests]);
 
   const unreadCount = useMemo(() => requests.filter((item) => !item.read_at).length, [requests]);
   const visibleItems = useMemo(() => {

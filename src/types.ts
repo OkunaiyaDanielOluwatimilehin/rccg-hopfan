@@ -1,7 +1,27 @@
+export type AdminRole = 'admin' | 'editorial' | 'prayer' | 'counselor' | 'follow_up' | 'member';
+
+export type AdminSection =
+  | 'overview'
+  | 'posts'
+  | 'sermons'
+  | 'devotionals'
+  | 'events'
+  | 'testimonials'
+  | 'users'
+  | 'settings'
+  | 'notifications'
+  | 'prayer_requests'
+  | 'counseling_requests'
+  | 'follow_up'
+  | 'department_requests'
+  | 'departments';
+
+export type RolePermissions = Record<AdminRole, Partial<Record<AdminSection, boolean>>>;
+
 export interface Profile {
   id: string;
   full_name: string;
-  role: 'admin' | 'member';
+  role: AdminRole;
   avatar_url?: string;
 }
 
@@ -75,6 +95,14 @@ export interface SiteSettings {
   ui_font?: string;
   heading_font?: string;
   editorial_font?: string;
+  featured_department_ids?: string[];
+  featured_department_columns?: number;
+  featured_department_rows?: number;
+  prayer_team_members?: string[];
+  counseling_team_members?: string[];
+  follow_up_team_members?: string[];
+  department_team_members?: string[];
+  role_permissions?: RolePermissions;
 }
 
 export interface SermonPlaylist {

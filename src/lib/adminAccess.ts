@@ -10,7 +10,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
   'users',
   'settings',
   'notifications',
-  'livestream',
   'prayer_requests',
   'counseling_requests',
   'follow_up',
@@ -29,7 +28,6 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissions = {
     users: true,
     settings: true,
     notifications: true,
-    livestream: true,
     prayer_requests: true,
     counseling_requests: true,
     follow_up: true,
@@ -46,7 +44,6 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissions = {
     users: false,
     settings: false,
     notifications: true,
-    livestream: false,
     prayer_requests: false,
     counseling_requests: false,
     follow_up: false,
@@ -63,7 +60,6 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissions = {
     users: false,
     settings: false,
     notifications: true,
-    livestream: false,
     prayer_requests: true,
     counseling_requests: false,
     follow_up: false,
@@ -80,7 +76,6 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissions = {
     users: false,
     settings: false,
     notifications: true,
-    livestream: false,
     prayer_requests: false,
     counseling_requests: true,
     follow_up: false,
@@ -97,7 +92,6 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissions = {
     users: false,
     settings: false,
     notifications: true,
-    livestream: false,
     prayer_requests: false,
     counseling_requests: false,
     follow_up: true,
@@ -114,7 +108,6 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissions = {
     users: false,
     settings: false,
     notifications: false,
-    livestream: false,
     prayer_requests: false,
     counseling_requests: false,
     follow_up: false,
@@ -179,7 +172,6 @@ export function resolveAdminSection(pathname: string): AdminSection | null {
   if (pathname.startsWith('/admin/users')) return 'users';
   if (pathname.startsWith('/admin/settings')) return 'settings';
   if (pathname.startsWith('/admin/notifications')) return 'notifications';
-  if (pathname.startsWith('/admin/live')) return 'livestream';
   if (pathname.startsWith('/admin/prayer-requests')) return 'prayer_requests';
   if (pathname.startsWith('/admin/counseling-requests')) return 'counseling_requests';
   if (pathname.startsWith('/admin/follow-up')) return 'follow_up';
@@ -195,7 +187,7 @@ export function getFirstAllowedPath(role: AdminRole | string | null | undefined,
   const preferredSections: AdminSection[] = (() => {
     switch (normalizedRole) {
       case 'editorial':
-        return ['posts', 'sermons', 'devotionals', 'notifications', 'livestream', 'overview', 'events', 'testimonials'];
+        return ['posts', 'sermons', 'devotionals', 'notifications', 'overview', 'events', 'testimonials'];
       case 'prayer':
         return ['prayer_requests', 'notifications', 'follow_up', 'department_requests', 'overview'];
       case 'counselor':
@@ -203,7 +195,7 @@ export function getFirstAllowedPath(role: AdminRole | string | null | undefined,
       case 'follow_up':
         return ['follow_up', 'notifications', 'department_requests', 'overview'];
       default:
-        return ['notifications', 'livestream', 'overview'];
+        return ['notifications', 'overview'];
     }
   })();
   const allowedSection =
@@ -217,8 +209,6 @@ export function getFirstAllowedPath(role: AdminRole | string | null | undefined,
       return ROLE_LANDING_PATHS.admin;
     case 'notifications':
       return '/admin/notifications';
-    case 'livestream':
-      return '/admin/live';
     case 'posts':
       return ROLE_LANDING_PATHS.editorial;
     case 'prayer_requests':
