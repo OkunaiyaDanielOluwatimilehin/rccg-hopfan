@@ -32,7 +32,7 @@ export default function Serve() {
               { id: '1', name: 'Worship & Music', description: 'Join our choir or technical team to lead the congregation in worship.', icon: 'Music' },
               { id: '2', name: 'Children & Youth', description: 'Invest in the next generation by teaching and mentoring our young ones.', icon: 'Users' },
               { id: '3', name: 'Hospitality', description: 'Welcome newcomers and help create a warm, friendly environment.', icon: 'Heart' },
-              { id: '4', name: 'Media & Tech', description: 'Help manage our live streams, social media, and technical production.', icon: 'Globe' },
+              { id: '4', name: 'Media & Tech', description: 'Help manage media content, social media, and technical production.', icon: 'Globe' },
               { id: '5', name: 'Prayer Ministry', description: 'Join our dedicated team of intercessors to pray for the church and nations.', icon: 'ShieldCheck' },
               { id: '6', name: 'Bible Study', description: 'Lead or assist in small group discussions and spiritual growth sessions.', icon: 'BookOpen' },
             ] as Department[]);

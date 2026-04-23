@@ -31,6 +31,13 @@ export default function AdminDashboard() {
   const [checkingAdmin, setCheckingAdmin] = useState(true);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [notificationCount, setNotificationCount] = useState(0);
+  const [openSidebarGroups, setOpenSidebarGroups] = useState({
+    core: true,
+    requests: true,
+    department: true,
+    content: true,
+    settings: true,
+  });
 
   const contentItems = [
     { name: 'Articles & Posts', path: '/admin/posts', icon: FileText, section: 'posts' as const },
@@ -184,9 +191,25 @@ export default function AdminDashboard() {
   const visibleContentItems = contentItems.filter((item) => canAccessSection(role, item.section, rolePermissions));
   const visibleSettingsItems = settingsItems.filter((item) => canAccessSection(role, item.section, rolePermissions));
   const coreItems = visibleMenuItems.filter((item) => ['overview', 'notifications', 'users'].includes(item.section));
-  const requestItems = visibleMenuItems.filter((item) => ['prayer_requests', 'counseling_requests', 'follow_up', 'department_requests'].includes(item.section));
+  const requestItems = visibleMenuItems.filter((item) => ['prayer_requests', 'counseling_requests', 'follow_up'].includes(item.section));
+  const departmentItems = visibleMenuItems.filter((item) => ['department_requests'].includes(item.section));
   const contentNavItems = visibleContentItems;
   const settingsNavItems = visibleSettingsItems;
+
+  useEffect(() => {
+    setOpenSidebarGroups((prev) => ({
+      ...prev,
+      core: prev.core || coreItems.some((item) => isActive(item.path)),
+      requests: prev.requests || requestItems.some((item) => isActive(item.path)),
+      department: prev.department || departmentItems.some((item) => isActive(item.path)),
+      content: prev.content || contentNavItems.some((item) => isActive(item.path)),
+      settings: prev.settings || location.pathname.startsWith('/admin/settings'),
+    }));
+  }, [location.pathname]);
+
+  const toggleSidebarGroup = (group: keyof typeof openSidebarGroups) => {
+    setOpenSidebarGroups((prev) => ({ ...prev, [group]: !prev[group] }));
+  };
 
   return (
     <div className="min-h-screen bg-stone-50 flex">
@@ -210,106 +233,193 @@ export default function AdminDashboard() {
         <nav className="flex-grow p-4 space-y-4">
           {coreItems.length > 0 ? (
             <div className="space-y-1">
-              <p className="px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.3em] text-stone-400">Core</p>
-              {coreItems.map((item) => {
-                const active = isActive(item.path);
-                const isNotifications = item.section === 'notifications';
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    className={`flex items-center justify-between px-4 py-3 text-sm font-medium transition-all group ${
-                      active
-                        ? 'bg-accent text-white shadow-lg shadow-accent/20'
-                        : isNotifications && notificationCount > 0
-                          ? 'bg-white/10 text-white ring-1 ring-accent/30'
-                          : 'text-stone-300 hover:bg-white/10'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <item.icon className={`w-5 h-5 transition-colors ${active || (isNotifications && notificationCount > 0) ? 'text-white' : 'text-stone-400 group-hover:text-white'}`} />
-                      {item.name}
-                    </div>
-                    <span className="inline-flex items-center gap-2">
-                      {isNotifications && notificationCount > 0 ? (
-                        <span className="min-w-5 h-5 px-1 inline-flex items-center justify-center rounded-full bg-accent text-white text-[10px] font-bold animate-pulse">
-                          {notificationCount}
+              <button
+                type="button"
+                onClick={() => toggleSidebarGroup('core')}
+                className="w-full px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.3em] text-stone-400 flex items-center justify-between hover:text-stone-200 transition-colors"
+              >
+                <span>Core</span>
+                <ChevronRight className={`w-3.5 h-3.5 transition-transform ${openSidebarGroups.core ? 'rotate-90' : ''}`} />
+              </button>
+              {openSidebarGroups.core
+                ? coreItems.map((item) => {
+                    const active = isActive(item.path);
+                    const isNotifications = item.section === 'notifications';
+                    return (
+                      <Link
+                        key={item.path}
+                        to={item.path}
+                        className={`flex items-center justify-between px-4 py-3 text-sm font-medium transition-all group ${
+                          active
+                            ? 'bg-accent text-white shadow-lg shadow-accent/20'
+                            : isNotifications && notificationCount > 0
+                              ? 'bg-white/10 text-white ring-1 ring-accent/30'
+                              : 'text-stone-300 hover:bg-white/10'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <item.icon
+                            className={`w-5 h-5 transition-colors ${
+                              active || (isNotifications && notificationCount > 0)
+                                ? 'text-white'
+                                : 'text-stone-400 group-hover:text-white'
+                            }`}
+                          />
+                          {item.name}
+                        </div>
+                        <span className="inline-flex items-center gap-2">
+                          {isNotifications && notificationCount > 0 ? (
+                            <span className="min-w-5 h-5 px-1 inline-flex items-center justify-center rounded-full bg-accent text-white text-[10px] font-bold animate-pulse">
+                              {notificationCount}
+                            </span>
+                          ) : null}
+                          {active && <ChevronRight className="w-4 h-4" />}
                         </span>
-                      ) : null}
-                      {active && <ChevronRight className="w-4 h-4" />}
-                    </span>
-                  </Link>
-                );
-              })}
+                      </Link>
+                    );
+                  })
+                : null}
             </div>
           ) : null}
 
           {requestItems.length > 0 ? (
             <div className="space-y-1 pt-4 border-t border-white/10">
-              <p className="px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.3em] text-stone-400">Requests</p>
-              {requestItems.map((item) => {
-                const active = isActive(item.path);
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    className={`flex items-center justify-between px-4 py-2.5 text-sm font-medium transition-all group ${
-                      active ? 'bg-white/10 text-white' : 'text-stone-300 hover:bg-white/10'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <item.icon className={`w-4 h-4 transition-colors ${active ? 'text-white' : 'text-stone-400 group-hover:text-white'}`} />
-                      <span className="text-sm">{item.name}</span>
-                    </div>
-                    {active && <ChevronRight className="w-4 h-4" />}
-                  </Link>
-                );
-              })}
+              <button
+                type="button"
+                onClick={() => toggleSidebarGroup('requests')}
+                className="w-full px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.3em] text-stone-400 flex items-center justify-between hover:text-stone-200 transition-colors"
+              >
+                <span>Requests</span>
+                <ChevronRight className={`w-3.5 h-3.5 transition-transform ${openSidebarGroups.requests ? 'rotate-90' : ''}`} />
+              </button>
+              {openSidebarGroups.requests
+                ? requestItems.map((item) => {
+                    const active = isActive(item.path);
+                    return (
+                      <Link
+                        key={item.path}
+                        to={item.path}
+                        className={`flex items-center justify-between px-4 py-2.5 text-sm font-medium transition-all group ${
+                          active ? 'bg-white/10 text-white' : 'text-stone-300 hover:bg-white/10'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <item.icon
+                            className={`w-4 h-4 transition-colors ${
+                              active ? 'text-white' : 'text-stone-400 group-hover:text-white'
+                            }`}
+                          />
+                          <span className="text-sm">{item.name}</span>
+                        </div>
+                        {active && <ChevronRight className="w-4 h-4" />}
+                      </Link>
+                    );
+                  })
+                : null}
+            </div>
+          ) : null}
+
+          {departmentItems.length > 0 ? (
+            <div className="space-y-1 pt-4 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => toggleSidebarGroup('department')}
+                className="w-full px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.3em] text-stone-400 flex items-center justify-between hover:text-stone-200 transition-colors"
+              >
+                <span>Department Requests</span>
+                <ChevronRight className={`w-3.5 h-3.5 transition-transform ${openSidebarGroups.department ? 'rotate-90' : ''}`} />
+              </button>
+              {openSidebarGroups.department
+                ? departmentItems.map((item) => {
+                    const active = isActive(item.path);
+                    return (
+                      <Link
+                        key={item.path}
+                        to={item.path}
+                        className={`flex items-center justify-between px-4 py-2.5 text-sm font-medium transition-all group ${
+                          active ? 'bg-white/10 text-white' : 'text-stone-300 hover:bg-white/10'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <item.icon
+                            className={`w-4 h-4 transition-colors ${
+                              active ? 'text-white' : 'text-stone-400 group-hover:text-white'
+                            }`}
+                          />
+                          <span className="text-sm">{item.name}</span>
+                        </div>
+                        {active && <ChevronRight className="w-4 h-4" />}
+                      </Link>
+                    );
+                  })
+                : null}
             </div>
           ) : null}
 
           {contentNavItems.length > 0 ? (
             <div className="space-y-1 pt-4 border-t border-white/10">
-              <p className="px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.3em] text-stone-400">Content</p>
-              {contentNavItems.map((item) => {
-                const active = isActive(item.path);
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    className={`flex items-center justify-between px-4 py-2.5 text-sm font-medium transition-all group ${
-                      active ? 'bg-white/10 text-white' : 'text-stone-300 hover:bg-white/10'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <item.icon className={`w-4 h-4 transition-colors ${active ? 'text-white' : 'text-stone-400 group-hover:text-white'}`} />
-                      <span className="text-sm">{item.name}</span>
-                    </div>
-                    {active && <ChevronRight className="w-4 h-4" />}
-                  </Link>
-                );
-              })}
+              <button
+                type="button"
+                onClick={() => toggleSidebarGroup('content')}
+                className="w-full px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.3em] text-stone-400 flex items-center justify-between hover:text-stone-200 transition-colors"
+              >
+                <span>Content</span>
+                <ChevronRight className={`w-3.5 h-3.5 transition-transform ${openSidebarGroups.content ? 'rotate-90' : ''}`} />
+              </button>
+              {openSidebarGroups.content
+                ? contentNavItems.map((item) => {
+                    const active = isActive(item.path);
+                    return (
+                      <Link
+                        key={item.path}
+                        to={item.path}
+                        className={`flex items-center justify-between px-4 py-2.5 text-sm font-medium transition-all group ${
+                          active ? 'bg-white/10 text-white' : 'text-stone-300 hover:bg-white/10'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <item.icon
+                            className={`w-4 h-4 transition-colors ${
+                              active ? 'text-white' : 'text-stone-400 group-hover:text-white'
+                            }`}
+                          />
+                          <span className="text-sm">{item.name}</span>
+                        </div>
+                        {active && <ChevronRight className="w-4 h-4" />}
+                      </Link>
+                    );
+                  })
+                : null}
             </div>
           ) : null}
 
           {settingsNavItems.length > 0 ? (
             <div className="space-y-1 pt-4 border-t border-white/10">
-              <p className="px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.3em] text-stone-400">Settings</p>
-              {settingsNavItems.map((item) => {
-                const active = currentLocation === item.path;
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    className={`flex items-center justify-between px-4 py-2.5 text-sm font-medium transition-all group ${
-                      active ? 'bg-white/10 text-white' : 'text-stone-300 hover:bg-white/10'
-                    }`}
-                  >
-                    <span className="text-sm">{item.name}</span>
-                    {active && <ChevronRight className="w-4 h-4" />}
-                  </Link>
-                );
-              })}
+              <button
+                type="button"
+                onClick={() => toggleSidebarGroup('settings')}
+                className="w-full px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.3em] text-stone-400 flex items-center justify-between hover:text-stone-200 transition-colors"
+              >
+                <span>Settings</span>
+                <ChevronRight className={`w-3.5 h-3.5 transition-transform ${openSidebarGroups.settings ? 'rotate-90' : ''}`} />
+              </button>
+              {openSidebarGroups.settings
+                ? settingsNavItems.map((item) => {
+                    const active = currentLocation === item.path;
+                    return (
+                      <Link
+                        key={item.path}
+                        to={item.path}
+                        className={`flex items-center justify-between px-4 py-2.5 text-sm font-medium transition-all group ${
+                          active ? 'bg-white/10 text-white' : 'text-stone-300 hover:bg-white/10'
+                        }`}
+                      >
+                        <span className="text-sm">{item.name}</span>
+                        {active && <ChevronRight className="w-4 h-4" />}
+                      </Link>
+                    );
+                  })
+                : null}
             </div>
           ) : null}
         </nav>
