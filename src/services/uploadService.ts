@@ -35,9 +35,18 @@ export async function uploadToR2ViaPresign(params: {
     ? sanitizeObjectPath(params.objectPath)
     : `${Date.now()}-${params.file.name}`;
 
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData.session?.access_token;
+  if (!accessToken) {
+    throw new Error('Admin session required for upload');
+  }
+
   const response = await fetch('/api/storage/upload-url', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
     body: JSON.stringify({
       fileName,
       fileType: params.file.type,
@@ -62,4 +71,3 @@ export async function uploadToR2ViaPresign(params: {
 
   return publicUrl;
 }
-

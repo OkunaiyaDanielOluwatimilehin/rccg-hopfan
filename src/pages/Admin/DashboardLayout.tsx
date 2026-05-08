@@ -184,9 +184,6 @@ export default function AdminDashboard() {
     navigate('/admin/login');
   };
 
-  if (loading || checkingAdmin) return <div className="p-8">Loading dashboard...</div>;
-  if (!isAllowedUser) return null;
-
   const visibleMenuItems = menuItems.filter((item) => canAccessSection(role, item.section, rolePermissions));
   const visibleContentItems = contentItems.filter((item) => canAccessSection(role, item.section, rolePermissions));
   const visibleSettingsItems = settingsItems.filter((item) => canAccessSection(role, item.section, rolePermissions));
@@ -206,6 +203,9 @@ export default function AdminDashboard() {
       settings: prev.settings || location.pathname.startsWith('/admin/settings'),
     }));
   }, [location.pathname]);
+
+  if (loading || checkingAdmin) return <div className="p-8">Loading dashboard...</div>;
+  if (!isAllowedUser) return null;
 
   const toggleSidebarGroup = (group: keyof typeof openSidebarGroups) => {
     setOpenSidebarGroups((prev) => ({ ...prev, [group]: !prev[group] }));

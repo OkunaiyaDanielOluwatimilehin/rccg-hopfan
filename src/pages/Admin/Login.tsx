@@ -181,10 +181,7 @@ export default function Login() {
 
           <div className="mt-8 text-center">
             <p className="mt-3 text-sm text-stone-600 font-medium">
-              Need an admin account?{' '}
-              <Link to="/admin/register" className="text-accent hover:underline">
-                Create one
-              </Link>
+              Need access? Contact existing site administrator.
             </p>
           </div>
 

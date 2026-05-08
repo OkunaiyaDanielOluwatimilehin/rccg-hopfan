@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { SiteSettings, Department, Leadership, GalleryItem, Devotional, NewsletterSubscription, ChurchEvent, GivingAccount, AdminRole, AdminSection, RolePermissions } from '../../types';
+import { SiteSettings, Department, Leadership, GalleryItem, Devotional, NewsletterSubscription, ChurchEvent, GivingAccount, AdminRole, AdminSection, RolePermissions, HomeBannerItem } from '../../types';
 import { Save, Plus, Trash2, Image as ImageIcon, Users, Clock, Info, Upload, Loader2, BookOpen, Mail, Calendar, Sparkles, ChevronUp, ChevronDown, Type, MapPin, Landmark } from 'lucide-react';
 import { motion } from 'motion/react';
 import { supabase } from '../../lib/supabase';
@@ -68,6 +68,30 @@ function readFeaturedDepartmentIds(settings: SiteSettings | null) {
     : [];
 }
 
+function readHomeBannerEventIds(settings: SiteSettings | null) {
+  if (Array.isArray((settings as any)?.home_banner_event_ids)) {
+    return ((settings as any).home_banner_event_ids as string[]).filter(Boolean);
+  }
+  const legacy = String((settings as any)?.home_banner_event_id || '').trim();
+  return legacy ? [legacy] : [];
+}
+
+function readHomeBannerItems(settings: SiteSettings | null): HomeBannerItem[] {
+  if (!Array.isArray((settings as any)?.home_banner_items)) return [];
+  return ((settings as any).home_banner_items as HomeBannerItem[])
+    .map((item, index) => ({
+      id: String(item?.id || `banner-${index}-${Date.now()}`),
+      title: String(item?.title || '').trim(),
+      message: String(item?.message || '').trim(),
+      button_label: String(item?.button_label || '').trim(),
+      button_url: String(item?.button_url || '').trim(),
+      image_url: String(item?.image_url || '').trim(),
+      event_id: String(item?.event_id || '').trim(),
+      eyebrow: String(item?.eyebrow || '').trim(),
+    }))
+    .filter((item) => item.title || item.message || item.button_label || item.button_url || item.image_url || item.event_id || item.eyebrow);
+}
+
 function readStringList(value: unknown) {
   if (Array.isArray(value)) {
     return value.map((item) => String(item || '').trim()).filter(Boolean);
@@ -98,6 +122,7 @@ function resolveSectionMode(title: string): SettingsMode {
   switch (title) {
     case 'Typography':
     case 'Hero Section':
+    case 'Homepage Event Banner':
     case 'Contact Details':
     case 'Giving Details':
     case 'Service Times':
@@ -442,6 +467,12 @@ export default function AdminSettings() {
         hero_subtitle: (settings as any).hero_subtitle ?? null,
         hero_image_url: (settings as any).hero_image_url ?? null,
         hero_images: Array.isArray((settings as any).hero_images) ? (settings as any).hero_images.slice(0, 6) : [],
+        home_banner_enabled: Boolean((settings as any).home_banner_enabled),
+        home_banner_event_ids: readHomeBannerEventIds(settings),
+        home_banner_items: readHomeBannerItems(settings),
+        home_banner_title: (settings as any).home_banner_title ?? null,
+        home_banner_message: (settings as any).home_banner_message ?? null,
+        home_banner_button_label: (settings as any).home_banner_button_label ?? null,
         about_us_title: (settings as any).about_us_title ?? null,
         about_us_content: (settings as any).about_us_content ?? null,
         pastor_welcome_title: (settings as any).pastor_welcome_title ?? null,
@@ -497,6 +528,14 @@ export default function AdminSettings() {
           (msg.includes('schema cache') && msg.includes('role_permissions')) ||
           msg.includes('column "role_permissions"') ||
           msg.includes("Could not find the 'role_permissions' column");
+        const missingHomeBanner =
+          (msg.includes('schema cache') && msg.includes('home_banner_')) ||
+          msg.includes('column "home_banner_enabled"') ||
+          msg.includes('column "home_banner_event_ids"') ||
+          msg.includes('column "home_banner_items"') ||
+          msg.includes('column "home_banner_title"') ||
+          msg.includes('column "home_banner_message"') ||
+          msg.includes('column "home_banner_button_label"');
         const missingFeaturedLayout =
           (msg.includes('schema cache') && msg.includes('featured_department_columns')) ||
           msg.includes('column "featured_department_columns"') ||
@@ -508,10 +547,16 @@ export default function AdminSettings() {
           msg.includes('column "follow_up_team_members"') ||
           msg.includes('column "department_team_members"');
 
-        if (!missingGivingAccounts && !missingFeaturedDepartments && !missingRolePermissions && !missingFeaturedLayout && !missingTeamLists) throw settingsError;
+        if (!missingGivingAccounts && !missingFeaturedDepartments && !missingRolePermissions && !missingHomeBanner && !missingFeaturedLayout && !missingTeamLists) throw settingsError;
 
         const {
           giving_accounts: _ignoredGivingAccounts,
+          home_banner_enabled: _ignoredHomeBannerEnabled,
+          home_banner_event_ids: _ignoredHomeBannerEventIds,
+          home_banner_items: _ignoredHomeBannerItems,
+          home_banner_title: _ignoredHomeBannerTitle,
+          home_banner_message: _ignoredHomeBannerMessage,
+          home_banner_button_label: _ignoredHomeBannerButtonLabel,
           featured_department_ids: _ignoredFeaturedDepartments,
           featured_department_columns: _ignoredFeaturedDepartmentColumns,
           featured_department_rows: _ignoredFeaturedDepartmentRows,
@@ -805,11 +850,15 @@ export default function AdminSettings() {
   const followUpTeamMembers = readStringList((settings as any)?.follow_up_team_members);
   const departmentTeamMembers = readStringList((settings as any)?.department_team_members);
   const rolePermissions = normalizeRolePermissions((settings as any)?.role_permissions);
+  const bannerEventIds = readHomeBannerEventIds(settings);
+  const bannerEvents = bannerEventIds.map((id) => events.find((event) => event.id === id)).filter(Boolean) as ChurchEvent[];
+  const bannerItems = readHomeBannerItems(settings);
   const settingsMode = resolveSettingsMode(location.pathname);
   const settingsNav = settingsMode === 'overview'
     ? [
         { id: 'typography', label: 'Typography' },
         { id: 'hero-section', label: 'Hero' },
+        { id: 'homepage-event-banner', label: 'Banner' },
         { id: 'contact-details', label: 'Contact' },
         { id: 'giving-details', label: 'Giving' },
         { id: 'service-times', label: 'Services' },
@@ -1216,6 +1265,264 @@ export default function AdminSettings() {
               </div>
             </div>
           </div>
+        </div>
+      </CollapsiblePanel>
+
+      <CollapsiblePanel
+        id="homepage-event-banner"
+        title="Homepage Event Banner"
+        description="Promote rotating custom banners below hero section."
+      >
+        <SectionSaveButton label="Save Event Banner" />
+        <h2 className="text-2xl font-serif font-bold flex items-center gap-3">
+          <Calendar className="w-6 h-6 text-accent" />
+          Homepage Banner
+        </h2>
+        <div className="space-y-6">
+          <label className="flex items-center gap-3 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-4">
+            <input
+              type="checkbox"
+              checked={Boolean((settings as any)?.home_banner_enabled)}
+              onChange={(e) => setSettings((prev) => (prev ? { ...prev, home_banner_enabled: e.target.checked } as any : null))}
+              className="h-4 w-4 accent-primary"
+            />
+            <div>
+              <p className="text-sm font-bold text-stone-900 uppercase tracking-widest">Enable banner</p>
+              <p className="text-xs text-stone-500">Shows under hero, before pastor welcome.</p>
+            </div>
+          </label>
+
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <p className="text-sm text-stone-500 max-w-3xl">Path = <span className="font-semibold text-stone-700">Admin → Settings → Overview → Banner</span>. Add any slide. Link event, custom URL, or both.</p>
+            <button
+              type="button"
+              onClick={() =>
+                setSettings((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        home_banner_items: [
+                          ...readHomeBannerItems(prev),
+                          {
+                            id: `banner-${Date.now()}`,
+                            title: '',
+                            message: '',
+                            button_label: 'Learn More',
+                            button_url: '',
+                            image_url: '',
+                            event_id: '',
+                            eyebrow: '',
+                          },
+                        ],
+                      } as any
+                    : null,
+                )
+              }
+              className="inline-flex items-center gap-2 px-5 py-3 bg-primary text-white font-bold hover:bg-primary/90 transition-colors"
+            >
+              <Plus className="w-4 h-4" /> Add Banner Slide
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            {bannerItems.length > 0 ? bannerItems.map((item, index) => (
+              <div key={item.id} className="border border-stone-200 bg-white p-5 space-y-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.3em] text-stone-400">Slide {index + 1}</p>
+                    <p className="text-lg font-semibold text-stone-900">{item.title || 'Untitled banner slide'}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSettings((prev) => {
+                          if (!prev) return null;
+                          const current = [...readHomeBannerItems(prev)];
+                          if (index === 0) return prev;
+                          [current[index - 1], current[index]] = [current[index], current[index - 1]];
+                          return { ...prev, home_banner_items: current } as any;
+                        })
+                      }
+                      disabled={index === 0}
+                      className="p-2 border border-stone-200 text-stone-600 hover:bg-stone-50 disabled:opacity-30"
+                    >
+                      <ChevronUp className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSettings((prev) => {
+                          if (!prev) return null;
+                          const current = [...readHomeBannerItems(prev)];
+                          if (index === current.length - 1) return prev;
+                          [current[index + 1], current[index]] = [current[index], current[index + 1]];
+                          return { ...prev, home_banner_items: current } as any;
+                        })
+                      }
+                      disabled={index === bannerItems.length - 1}
+                      className="p-2 border border-stone-200 text-stone-600 hover:bg-stone-50 disabled:opacity-30"
+                    >
+                      <ChevronDown className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSettings((prev) => {
+                          if (!prev) return null;
+                          return { ...prev, home_banner_items: readHomeBannerItems(prev).filter((entry) => entry.id !== item.id) } as any;
+                        })
+                      }
+                      className="p-2 border border-rose-100 bg-rose-50 text-rose-600 hover:bg-rose-100"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-widest text-stone-500">Eyebrow</label>
+                    <input
+                      type="text"
+                      value={item.eyebrow || ''}
+                      onChange={(e) =>
+                        setSettings((prev) => {
+                          if (!prev) return null;
+                          const current = readHomeBannerItems(prev).map((entry) => entry.id === item.id ? { ...entry, eyebrow: e.target.value } : entry);
+                          return { ...prev, home_banner_items: current } as any;
+                        })
+                      }
+                      placeholder="Special Notice"
+                      className="w-full p-3 border border-stone-200 focus:ring-4 focus:ring-accent/10 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-widest text-stone-500">Title</label>
+                    <input
+                      type="text"
+                      value={item.title}
+                      onChange={(e) =>
+                        setSettings((prev) => {
+                          if (!prev) return null;
+                          const current = readHomeBannerItems(prev).map((entry) => entry.id === item.id ? { ...entry, title: e.target.value } : entry);
+                          return { ...prev, home_banner_items: current } as any;
+                        })
+                      }
+                      placeholder="Banner title"
+                      className="w-full p-3 border border-stone-200 focus:ring-4 focus:ring-accent/10 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-xs font-bold uppercase tracking-widest text-stone-500">Message</label>
+                    <textarea
+                      value={item.message || ''}
+                      onChange={(e) =>
+                        setSettings((prev) => {
+                          if (!prev) return null;
+                          const current = readHomeBannerItems(prev).map((entry) => entry.id === item.id ? { ...entry, message: e.target.value } : entry);
+                          return { ...prev, home_banner_items: current } as any;
+                        })
+                      }
+                      rows={3}
+                      placeholder="Banner message"
+                      className="w-full p-3 border border-stone-200 focus:ring-4 focus:ring-accent/10 outline-none transition-all resize-none"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-widest text-stone-500">Button Label</label>
+                    <input
+                      type="text"
+                      value={item.button_label || ''}
+                      onChange={(e) =>
+                        setSettings((prev) => {
+                          if (!prev) return null;
+                          const current = readHomeBannerItems(prev).map((entry) => entry.id === item.id ? { ...entry, button_label: e.target.value } : entry);
+                          return { ...prev, home_banner_items: current } as any;
+                        })
+                      }
+                      placeholder="Learn More"
+                      className="w-full p-3 border border-stone-200 focus:ring-4 focus:ring-accent/10 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-widest text-stone-500">Button URL</label>
+                    <input
+                      type="text"
+                      value={item.button_url || ''}
+                      onChange={(e) =>
+                        setSettings((prev) => {
+                          if (!prev) return null;
+                          const current = readHomeBannerItems(prev).map((entry) => entry.id === item.id ? { ...entry, button_url: e.target.value } : entry);
+                          return { ...prev, home_banner_items: current } as any;
+                        })
+                      }
+                      placeholder="/events or https://..."
+                      className="w-full p-3 border border-stone-200 focus:ring-4 focus:ring-accent/10 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-widest text-stone-500">Image URL</label>
+                    <input
+                      type="text"
+                      value={item.image_url || ''}
+                      onChange={(e) =>
+                        setSettings((prev) => {
+                          if (!prev) return null;
+                          const current = readHomeBannerItems(prev).map((entry) => entry.id === item.id ? { ...entry, image_url: e.target.value } : entry);
+                          return { ...prev, home_banner_items: current } as any;
+                        })
+                      }
+                      placeholder="https://..."
+                      className="w-full p-3 border border-stone-200 focus:ring-4 focus:ring-accent/10 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-widest text-stone-500">Linked Event (optional)</label>
+                    <select
+                      value={item.event_id || ''}
+                      onChange={(e) =>
+                        setSettings((prev) => {
+                          if (!prev) return null;
+                          const linked = events.find((event) => event.id === e.target.value);
+                          const current = readHomeBannerItems(prev).map((entry) =>
+                            entry.id === item.id
+                              ? {
+                                  ...entry,
+                                  event_id: e.target.value,
+                                  title: entry.title || linked?.title || '',
+                                  message: entry.message || linked?.description || '',
+                                  image_url: entry.image_url || linked?.image_url || '',
+                                  button_label: entry.button_label || 'View Event',
+                                  button_url: entry.button_url || (linked ? `/events/${linked.id}` : ''),
+                                }
+                              : entry,
+                          );
+                          return { ...prev, home_banner_items: current } as any;
+                        })
+                      }
+                      className="w-full p-3 border border-stone-200 bg-white focus:ring-4 focus:ring-accent/10 outline-none transition-all"
+                    >
+                      <option value="">No linked event</option>
+                      {events.map((event) => (
+                        <option key={event.id} value={event.id}>{event.title} - {event.event_date}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )) : (
+              <div className="p-6 border border-dashed border-stone-200 text-sm text-stone-500 italic">
+                No banner slides yet. Click `Add Banner Slide`.
+              </div>
+            )}
+          </div>
+
+          {bannerEvents.length > 0 ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              Legacy event rotation still loaded: {bannerEvents.length}. New custom slides take priority.
+            </div>
+          ) : null}
         </div>
       </CollapsiblePanel>
 

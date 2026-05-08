@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Post, Sermon, SiteSettings, Department, Leadership, GalleryItem, ChurchEvent, Testimonial, Devotional } from '../types';
+import { Post, Sermon, SiteSettings, Department, Leadership, GalleryItem, ChurchEvent, Testimonial, Devotional, HomeBannerItem } from '../types';
 import { Play, Calendar as CalendarIcon, ArrowRight, Clock, Users, Heart, Image as ImageIcon, Music, Mic2, ChevronLeft, ChevronRight, MapPin, MessageSquareHeart, CircleHelp, Landmark, Copy, Mail, Quote, Share2, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
@@ -55,7 +55,6 @@ export default function Home() {
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
   const [events, setEvents] = useState<ChurchEvent[]>([]);
   const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchAllData() {
@@ -108,8 +107,6 @@ export default function Home() {
         if (testimonialsRes.data) setTestimonials(testimonialsRes.data);
       } catch (error) {
         console.error('Error fetching home data:', error);
-      } finally {
-        setLoading(false);
       }
     }
     fetchAllData();
@@ -139,6 +136,7 @@ export default function Home() {
   const [activeModal, setActiveModal] = useState<'prayer' | 'counseling' | 'giving' | null>(null);
   const [heroIndex, setHeroIndex] = useState(0);
   const [latestIndex, setLatestIndex] = useState(0);
+  const [homeBannerIndex, setHomeBannerIndex] = useState(0);
   const [activeDepartment, setActiveDepartment] = useState<Department | null>(null);
   const [departmentModalMode, setDepartmentModalMode] = useState<'details' | 'join'>('details');
   const [formSuccess, setFormSuccess] = useState<string | null>(null);
@@ -163,6 +161,49 @@ export default function Home() {
     () => events.filter((event) => !event.published_at || new Date(event.published_at) <= new Date()),
     [events],
   );
+  const customHomeBannerItems = useMemo(() => {
+    const rows = Array.isArray(settings?.home_banner_items) ? settings.home_banner_items : [];
+    return rows
+      .map((item) => {
+        const linkedEvent = item.event_id ? visibleEvents.find((event) => event.id === item.event_id) : null;
+        return {
+          id: item.id,
+          eyebrow: item.eyebrow || settings?.home_banner_title || 'Featured',
+          title: item.title || linkedEvent?.title || '',
+          message: item.message || linkedEvent?.description || settings?.home_banner_message || '',
+          buttonLabel: item.button_label || settings?.home_banner_button_label || (linkedEvent ? 'View Event' : 'Learn More'),
+          buttonUrl: item.button_url || (linkedEvent ? `/events/${linkedEvent.id}` : ''),
+          imageUrl: item.image_url || linkedEvent?.image_url || '',
+          eventDate: linkedEvent?.event_date || '',
+          eventTime: linkedEvent?.event_time || '',
+          location: linkedEvent?.location || '',
+        };
+      })
+      .filter((item) => item.title || item.message || item.imageUrl || item.buttonUrl);
+  }, [settings?.home_banner_items, settings?.home_banner_title, settings?.home_banner_message, settings?.home_banner_button_label, visibleEvents]);
+  const homeBannerEventIds = Array.isArray(settings?.home_banner_event_ids)
+    ? settings.home_banner_event_ids
+    : (settings as any)?.home_banner_event_id
+      ? [String((settings as any).home_banner_event_id)]
+      : [];
+  const homeBannerEvents = homeBannerEventIds
+    .map((id) => visibleEvents.find((event) => event.id === id))
+    .filter(Boolean) as ChurchEvent[];
+  const fallbackBannerItems = homeBannerEvents.map((event) => ({
+    id: event.id,
+    eyebrow: settings?.home_banner_title || 'Upcoming Events',
+    title: event.title,
+    message: settings?.home_banner_message || event.description || '',
+    buttonLabel: settings?.home_banner_button_label || 'View Event',
+    buttonUrl: `/events/${event.id}`,
+    imageUrl: event.image_url || '',
+    eventDate: event.event_date,
+    eventTime: event.event_time || '',
+    location: event.location || '',
+  }));
+  const homeBannerItems = customHomeBannerItems.length > 0 ? customHomeBannerItems : fallbackBannerItems;
+  const homeBannerItem = homeBannerItems[homeBannerIndex] || homeBannerItems[0];
+  const showHomeBanner = Boolean(settings?.home_banner_enabled && homeBannerItems.length > 0 && homeBannerItem);
 
   const featuredDepartments = useMemo(() => {
     const selected = featuredDepartmentIds.filter(Boolean);
@@ -181,6 +222,18 @@ export default function Home() {
     }, 7000);
     return () => window.clearInterval(id);
   }, [heroImagesKey]);
+
+  useEffect(() => {
+    setHomeBannerIndex(0);
+  }, [homeBannerItems.map((item) => item.id).join('|')]);
+
+  useEffect(() => {
+    if (homeBannerItems.length < 2) return;
+    const id = window.setInterval(() => {
+      setHomeBannerIndex((i) => (i + 1) % homeBannerItems.length);
+    }, 6000);
+    return () => window.clearInterval(id);
+  }, [homeBannerItems.length]);
 
   const latestSlides = useMemo(() => {
     const latestPost = posts[0];
@@ -377,6 +430,63 @@ export default function Home() {
         </div>
 
       </section>
+
+      {showHomeBanner && homeBannerItem && (
+        <section className="w-full px-4 sm:px-8 md:px-16 -mt-10 relative z-20">
+          <div className="bg-white border border-stone-200 shadow-2xl shadow-primary/10 overflow-hidden">
+            <div className="grid grid-cols-1 lg:grid-cols-[220px,1fr,auto] items-stretch">
+              <div
+                className="bg-primary text-white px-6 py-5 sm:px-8 sm:py-6 flex flex-col justify-center bg-cover bg-center"
+                style={homeBannerItem.imageUrl ? { backgroundImage: `linear-gradient(rgba(28,25,23,0.6), rgba(28,25,23,0.6)), url(${homeBannerItem.imageUrl})` } : undefined}
+              >
+                <span className="text-[11px] font-bold uppercase tracking-[0.35em] text-accent/90 mb-2">
+                  {homeBannerItem.eyebrow || 'Featured'}
+                </span>
+                <span className="text-2xl sm:text-3xl font-serif font-bold">
+                  {homeBannerItem.eventDate ? format(new Date(homeBannerItem.eventDate), 'MMM d') : homeBannerItem.title}
+                </span>
+              </div>
+              <div className="px-6 py-5 sm:px-8 sm:py-6 bg-white">
+                <h2 className="text-xl sm:text-2xl font-serif font-bold text-primary">
+                  {homeBannerItem.title}
+                </h2>
+                <p className="mt-2 text-sm sm:text-base text-stone-600 leading-relaxed">
+                  {homeBannerItem.message}
+                </p>
+                {homeBannerItem.eventTime || homeBannerItem.location ? (
+                  <div className="mt-4 flex flex-wrap gap-3 text-xs sm:text-sm font-bold uppercase tracking-widest text-stone-500">
+                    {homeBannerItem.eventTime ? <span className="px-3 py-2 bg-stone-100">{homeBannerItem.eventTime}</span> : null}
+                    {homeBannerItem.location ? <span className="px-3 py-2 bg-stone-100">{homeBannerItem.location}</span> : null}
+                  </div>
+                ) : null}
+              </div>
+              <div className="px-6 py-5 sm:px-8 sm:py-6 bg-stone-50 flex flex-col justify-center">
+                {homeBannerItem.buttonUrl ? (
+                  <Link
+                    to={homeBannerItem.buttonUrl}
+                    className="inline-flex items-center gap-2 bg-accent text-white px-6 py-3 font-bold hover:bg-primary transition-colors whitespace-nowrap"
+                  >
+                    {homeBannerItem.buttonLabel} <ArrowRight className="w-4 h-4" />
+                  </Link>
+                ) : null}
+                {homeBannerItems.length > 1 ? (
+                  <div className="mt-4 flex items-center gap-2">
+                    {homeBannerItems.map((item, index) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setHomeBannerIndex(index)}
+                        className={`h-2.5 w-2.5 rounded-full transition-colors ${index === homeBannerIndex ? 'bg-primary' : 'bg-stone-300 hover:bg-stone-400'}`}
+                        aria-label={`Show banner event ${index + 1}`}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Event Carousel */}
       {latestEventSlides.length > 0 && (
