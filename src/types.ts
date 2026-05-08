@@ -66,6 +66,12 @@ export interface SiteSettings {
   hero_subtitle: string;
   hero_image_url: string;
   hero_images?: string[];
+  home_banner_enabled?: boolean;
+  home_banner_event_ids?: string[];
+  home_banner_items?: HomeBannerItem[];
+  home_banner_title?: string;
+  home_banner_message?: string;
+  home_banner_button_label?: string;
   about_us_title: string;
   about_us_content: string;
   service_times: ServiceTime[];
@@ -217,6 +223,17 @@ export interface ChurchEvent {
   category: string;
   image_url?: string;
   created_at: string;
+}
+
+export interface HomeBannerItem {
+  id: string;
+  title: string;
+  message?: string;
+  button_label?: string;
+  button_url?: string;
+  image_url?: string;
+  event_id?: string;
+  eyebrow?: string;
 }
 
 export interface PostComment {
