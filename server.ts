@@ -51,6 +51,9 @@ async function startServer() {
 
   // Endpoint to get a presigned URL for uploading to R2
   app.post("/api/storage/upload-url", async (req, res) => {
+    const auth = await authenticateAdminRequest(req, res);
+    if (!auth) return;
+
     const fileName: string | undefined = req.body?.fileName;
     const fileType: string | undefined = req.body?.fileType || req.body?.contentType;
     const requestedPath: string | undefined = req.body?.path;
