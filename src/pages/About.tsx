@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { Heart, Users, Target, ShieldCheck } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import MarkdownContent from '../components/MarkdownContent';
 
@@ -74,6 +75,14 @@ export default function About() {
               RCCG House of Prayer for All Nations (HOPFAN) is a vibrant community dedicated to worship, 
               spiritual growth, and serving our generation with the love of Christ.
             </p>
+            <div className="pt-6 space-y-4 max-w-2xl">
+              <Link to={{ pathname: '/', hash: '#departments' }} className="inline-flex text-accent font-bold text-lg underline underline-offset-8">
+                Join us in service
+              </Link>
+              <p className="text-stone-300 leading-relaxed">
+                Service is physical. Anyone who wants to serve must present himself or herself to the proper head of department for final screening and admittance.
+              </p>
+            </div>
           </motion.div>
         </div>
         <div className="absolute -right-20 -bottom-20 w-[600px] h-[600px] bg-accent/5 rounded-full blur-[120px]" />

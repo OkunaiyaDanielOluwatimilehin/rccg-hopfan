@@ -98,6 +98,22 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissions = {
     department_requests: false,
     departments: false,
   },
+  department_admin: {
+    overview: false,
+    posts: false,
+    sermons: false,
+    devotionals: false,
+    events: false,
+    testimonials: false,
+    users: false,
+    settings: false,
+    notifications: true,
+    prayer_requests: false,
+    counseling_requests: false,
+    follow_up: false,
+    department_requests: true,
+    departments: true,
+  },
   member: {
     overview: false,
     posts: false,
@@ -122,11 +138,12 @@ export const ROLE_LANDING_PATHS: Record<AdminRole, string> = {
   prayer: '/admin/prayer-requests',
   counselor: '/admin/counseling-requests',
   follow_up: '/admin/follow-up',
+  department_admin: '/admin/department-requests',
   member: '/',
 };
 
 export function normalizeAdminRole(role?: string | null): AdminRole {
-  if (role === 'admin' || role === 'editorial' || role === 'prayer' || role === 'counselor' || role === 'follow_up' || role === 'member') {
+  if (role === 'admin' || role === 'editorial' || role === 'prayer' || role === 'counselor' || role === 'follow_up' || role === 'department_admin' || role === 'member') {
     return role;
   }
   return 'member';
@@ -139,6 +156,7 @@ export function getRolePermissions(matrix?: RolePermissions | null): RolePermiss
     prayer: { ...DEFAULT_ROLE_PERMISSIONS.prayer, ...(matrix.prayer || {}) },
     counselor: { ...DEFAULT_ROLE_PERMISSIONS.counselor, ...(matrix.counselor || {}) },
     follow_up: { ...DEFAULT_ROLE_PERMISSIONS.follow_up, ...(matrix.follow_up || {}) },
+    department_admin: { ...DEFAULT_ROLE_PERMISSIONS.department_admin, ...(matrix.department_admin || {}) },
     member: { ...DEFAULT_ROLE_PERMISSIONS.member, ...(matrix.member || {}) },
   };
   return {
@@ -147,6 +165,7 @@ export function getRolePermissions(matrix?: RolePermissions | null): RolePermiss
     prayer: { ...merged.prayer, overview: false },
     counselor: { ...merged.counselor, overview: false },
     follow_up: { ...merged.follow_up, overview: false },
+    department_admin: { ...merged.department_admin, overview: false },
     member: { ...merged.member, overview: false },
   };
 }
@@ -176,6 +195,7 @@ export function resolveAdminSection(pathname: string): AdminSection | null {
   if (pathname.startsWith('/admin/counseling-requests')) return 'counseling_requests';
   if (pathname.startsWith('/admin/follow-up')) return 'follow_up';
   if (pathname.startsWith('/admin/department-requests')) return 'department_requests';
+  if (pathname.startsWith('/admin/departments')) return 'departments';
   if (pathname === '/admin') return 'overview';
   return null;
 }
@@ -194,6 +214,8 @@ export function getFirstAllowedPath(role: AdminRole | string | null | undefined,
         return ['counseling_requests', 'notifications', 'follow_up', 'department_requests', 'overview'];
       case 'follow_up':
         return ['follow_up', 'notifications', 'department_requests', 'overview'];
+      case 'department_admin':
+        return ['department_requests', 'departments', 'notifications', 'overview'];
       default:
         return ['notifications', 'overview'];
     }
@@ -217,6 +239,9 @@ export function getFirstAllowedPath(role: AdminRole | string | null | undefined,
       return ROLE_LANDING_PATHS.counselor;
     case 'follow_up':
       return ROLE_LANDING_PATHS.follow_up;
+    case 'department_requests':
+    case 'departments':
+      return ROLE_LANDING_PATHS.department_admin;
     case 'sermons':
     case 'devotionals':
       return ROLE_LANDING_PATHS.editorial;

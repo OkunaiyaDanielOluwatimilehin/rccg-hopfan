@@ -4,6 +4,7 @@ import { User as UserIcon, Upload, LogOut, ArrowLeft, Loader2 } from 'lucide-rea
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { uploadToSupabasePublicBucket } from '../services/uploadService';
+import { ContentDownload, SermonPlaylist, SermonNote, WatchProgress } from '../types';
 
 type ProfileRow = {
   id: string;
@@ -23,6 +24,10 @@ export default function Profile() {
   const [uploading, setUploading] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [progress, setProgress] = useState<WatchProgress[]>([]);
+  const [notes, setNotes] = useState<SermonNote[]>([]);
+  const [playlists, setPlaylists] = useState<SermonPlaylist[]>([]);
+  const [downloads, setDownloads] = useState<ContentDownload[]>([]);
 
   const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
   const ALLOWED_AVATAR_TYPES = useMemo(() => new Set(['image/jpeg', 'image/png', 'image/webp']), []);
@@ -39,13 +44,23 @@ export default function Profile() {
         return;
       }
       setLoading(true);
-      const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+      const [{ data, error }, progressRes, notesRes, playlistsRes, downloadsRes] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', user.id).single(),
+        supabase.from('watch_progress').select('*').eq('user_id', user.id).order('last_viewed_at', { ascending: false }).limit(6),
+        supabase.from('sermon_notes').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }).limit(6),
+        supabase.from('sermon_playlists').select('*').eq('user_id', user.id).order('updated_at', { ascending: false }).limit(6),
+        supabase.from('content_downloads').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(6),
+      ]);
       if (error) {
         console.error('Error loading profile:', error);
       } else if (data) {
         setProfile(data as ProfileRow);
         setFullName((data as any).full_name || '');
       }
+      if (!progressRes.error) setProgress((progressRes.data || []) as WatchProgress[]);
+      if (!notesRes.error) setNotes((notesRes.data || []) as SermonNote[]);
+      if (!playlistsRes.error) setPlaylists((playlistsRes.data || []) as SermonPlaylist[]);
+      if (!downloadsRes.error) setDownloads((downloadsRes.data || []) as ContentDownload[]);
       setLoading(false);
     };
     init();
@@ -194,6 +209,46 @@ export default function Profile() {
               Save Profile
             </button>
           </form>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-6">
+          <section className="bg-white border border-stone-200 shadow-sm p-6 space-y-4">
+            <h2 className="text-xl font-bold text-primary">Continue Watching</h2>
+            {progress.length === 0 ? <p className="text-stone-500">No saved progress yet.</p> : progress.map((item) => (
+              <Link key={item.id} to={item.content_type === 'sermon' || item.content_type === 'audio' ? `/sermons/${item.content_id}` : '#'} className="block border border-stone-100 bg-stone-50 p-4">
+                <p className="font-bold text-primary capitalize">{item.content_type}</p>
+                <p className="text-sm text-stone-500">{Math.round(item.completion_percentage)}% complete</p>
+              </Link>
+            ))}
+          </section>
+
+          <section className="bg-white border border-stone-200 shadow-sm p-6 space-y-4">
+            <h2 className="text-xl font-bold text-primary">My Notes</h2>
+            {notes.length === 0 ? <p className="text-stone-500">No notes yet.</p> : notes.map((note) => (
+              <Link key={note.id} to={`/sermons/${note.sermon_id}`} className="block border border-stone-100 bg-stone-50 p-4">
+                <p className="text-sm text-stone-600 line-clamp-2">{note.body}</p>
+              </Link>
+            ))}
+          </section>
+
+          <section className="bg-white border border-stone-200 shadow-sm p-6 space-y-4">
+            <h2 className="text-xl font-bold text-primary">My Playlists</h2>
+            {playlists.length === 0 ? <p className="text-stone-500">No playlists yet.</p> : playlists.map((playlist) => (
+              <Link key={playlist.id} to={`/playlists/${playlist.id}`} className="block border border-stone-100 bg-stone-50 p-4 font-bold text-primary">
+                {playlist.title}
+              </Link>
+            ))}
+          </section>
+
+          <section className="bg-white border border-stone-200 shadow-sm p-6 space-y-4">
+            <h2 className="text-xl font-bold text-primary">Downloads</h2>
+            {downloads.length === 0 ? <p className="text-stone-500">No downloads yet.</p> : downloads.map((download) => (
+              <a key={download.id} href={download.resource_url} target="_blank" rel="noopener noreferrer" className="block border border-stone-100 bg-stone-50 p-4">
+                <p className="font-bold text-primary capitalize">{download.resource_type}</p>
+                <p className="text-sm text-stone-500">{new Date(download.created_at).toLocaleDateString()}</p>
+              </a>
+            ))}
+          </section>
         </div>
       </div>
     </div>

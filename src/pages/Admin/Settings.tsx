@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { SiteSettings, Department, Leadership, GalleryItem, Devotional, NewsletterSubscription, ChurchEvent, GivingAccount, AdminRole, AdminSection, RolePermissions, HomeBannerItem } from '../../types';
-import { Save, Plus, Trash2, Image as ImageIcon, Users, Clock, Info, Upload, Loader2, BookOpen, Mail, Calendar, Sparkles, ChevronUp, ChevronDown, Type, MapPin, Landmark } from 'lucide-react';
+import { Save, Plus, Trash2, Image as ImageIcon, Users, Clock, Info, Upload, Loader2, BookOpen, Mail, Calendar, Sparkles, ChevronUp, ChevronDown, Type, MapPin, Landmark, Video } from 'lucide-react';
 import { motion } from 'motion/react';
 import { supabase } from '../../lib/supabase';
 import { uploadToR2ViaPresign, uploadToSupabasePublicBucket } from '../../services/uploadService';
@@ -10,6 +10,13 @@ import { ADMIN_SECTIONS, DEFAULT_ROLE_PERMISSIONS, getRolePermissions } from '..
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value: unknown): value is string => typeof value === 'string' && UUID_REGEX.test(value);
+
+type ProfileOption = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  role: AdminRole | null;
+};
 
 const FONT_OPTIONS: Record<string, string> = {
   manrope: '"Manrope","Inter",ui-sans-serif,system-ui,sans-serif',
@@ -60,6 +67,20 @@ function normalizeGivingAccounts(accounts: GivingAccount[]) {
       account_number: String(account?.account_number || '').trim(),
     }))
     .filter((account) => account.section || account.bank_name || account.account_name || account.account_number);
+}
+
+function readVisitItems(settings: SiteSettings | null) {
+  const defaults = [
+    { title: 'What to Expect', desc: 'A typical service lasts about 90 minutes. We sing a mix of contemporary and traditional music, followed by a practical, Bible-based message.' },
+    { title: 'What about my kids?', desc: "We believe that kids should have a blast at church every single week. Our children's ministry provides a safe, fun environment where they can learn about God on their level." },
+    { title: 'Where do I park?', desc: "We have dedicated parking for visitors right near the main entrance. Just look for the 'Visitor Parking' signs when you arrive!" },
+    { title: 'What should I wear?', desc: "Come as you are! You'll see everything from suits and dresses to jeans and t-shirts. We're more interested in meeting you than in what you wear." },
+  ];
+  const items = Array.isArray((settings as any)?.visit_items) ? (settings as any).visit_items : defaults;
+  return items.map((item: any) => ({
+    title: String(item?.title || '').trim(),
+    desc: String(item?.desc || '').trim(),
+  }));
 }
 
 function readFeaturedDepartmentIds(settings: SiteSettings | null) {
@@ -202,6 +223,7 @@ export default function AdminSettings() {
   const [devotionals, setDevotionals] = useState<Devotional[]>([]);
   const [events, setEvents] = useState<ChurchEvent[]>([]);
   const [subscribers, setSubscribers] = useState<NewsletterSubscription[]>([]);
+  const [profiles, setProfiles] = useState<ProfileOption[]>([]);
   const [newHeroImageUrl, setNewHeroImageUrl] = useState('');
 
   useEffect(() => {
@@ -218,7 +240,8 @@ export default function AdminSettings() {
         galleryRes,
         devRes,
         eventsRes,
-        subsRes
+        subsRes,
+        profilesRes
       ] = await Promise.all([
         supabase.from('site_settings').select('*').single(),
         supabase.from('departments').select('*').order('name'),
@@ -226,7 +249,8 @@ export default function AdminSettings() {
         supabase.from('gallery').select('*').order('created_at', { ascending: false }),
         supabase.from('devotionals').select('*').order('date', { ascending: false }),
         supabase.from('events').select('*').order('event_date', { ascending: false }),
-        supabase.from('newsletter_subscriptions').select('*').order('created_at', { ascending: false })
+        supabase.from('newsletter_subscriptions').select('*').order('created_at', { ascending: false }),
+        supabase.from('profiles').select('id,full_name,email,role').order('full_name', { ascending: true })
       ]);
 
       const firstError =
@@ -236,7 +260,8 @@ export default function AdminSettings() {
         galleryRes.error ||
         devRes.error ||
         eventsRes.error ||
-        subsRes.error;
+        subsRes.error ||
+        profilesRes.error;
 
       if (firstError) throw firstError;
 
@@ -247,6 +272,7 @@ export default function AdminSettings() {
       if (devRes.data) setDevotionals(devRes.data);
       if (eventsRes.data) setEvents(eventsRes.data);
       if (subsRes.data) setSubscribers(subsRes.data);
+      if (profilesRes.data) setProfiles(profilesRes.data as ProfileOption[]);
     } catch (error) {
       console.error('Error fetching settings:', error);
     } finally {
@@ -438,6 +464,16 @@ export default function AdminSettings() {
     });
   };
 
+  const handleUpdateVisitItem = (index: number, field: 'title' | 'desc', value: string) => {
+    setSettings(prev => {
+      if (!prev) return null;
+      const current = readVisitItems(prev);
+      if (!current[index]) return prev;
+      current[index] = { ...current[index], [field]: value };
+      return { ...prev, visit_items: current } as any;
+    });
+  };
+
   const handleSaveSettings = async () => {
     if (!settings) return;
     setSaving(true);
@@ -467,6 +503,10 @@ export default function AdminSettings() {
         hero_subtitle: (settings as any).hero_subtitle ?? null,
         hero_image_url: (settings as any).hero_image_url ?? null,
         hero_images: Array.isArray((settings as any).hero_images) ? (settings as any).hero_images.slice(0, 6) : [],
+        live_embed_enabled: Boolean((settings as any).live_embed_enabled),
+        live_embed_url: (settings as any).live_embed_url ?? null,
+        live_embed_title: (settings as any).live_embed_title ?? null,
+        live_embed_note: (settings as any).live_embed_note ?? null,
         home_banner_enabled: Boolean((settings as any).home_banner_enabled),
         home_banner_event_ids: readHomeBannerEventIds(settings),
         home_banner_items: readHomeBannerItems(settings),
@@ -496,6 +536,9 @@ export default function AdminSettings() {
         giving_account_name: primaryGivingAccount?.account_name ?? null,
         giving_account_number: primaryGivingAccount?.account_number ?? null,
         giving_note: (settings as any).giving_note ?? null,
+        visit_title: (settings as any).visit_title ?? null,
+        visit_intro: (settings as any).visit_intro ?? null,
+        visit_items: readVisitItems(settings),
         auth_image_url: (settings as any).auth_image_url ?? null,
         admin_auth_image_url: (settings as any).admin_auth_image_url ?? null,
         ui_font: (settings as any).ui_font ?? null,
@@ -536,6 +579,12 @@ export default function AdminSettings() {
           msg.includes('column "home_banner_title"') ||
           msg.includes('column "home_banner_message"') ||
           msg.includes('column "home_banner_button_label"');
+        const missingLiveEmbed =
+          (msg.includes('schema cache') && msg.includes('live_embed_')) ||
+          msg.includes('column "live_embed_enabled"') ||
+          msg.includes('column "live_embed_url"') ||
+          msg.includes('column "live_embed_title"') ||
+          msg.includes('column "live_embed_note"');
         const missingFeaturedLayout =
           (msg.includes('schema cache') && msg.includes('featured_department_columns')) ||
           msg.includes('column "featured_department_columns"') ||
@@ -546,8 +595,13 @@ export default function AdminSettings() {
           msg.includes('column "counseling_team_members"') ||
           msg.includes('column "follow_up_team_members"') ||
           msg.includes('column "department_team_members"');
+        const missingVisitFields =
+          (msg.includes('schema cache') && msg.includes('visit_')) ||
+          msg.includes('column "visit_title"') ||
+          msg.includes('column "visit_intro"') ||
+          msg.includes('column "visit_items"');
 
-        if (!missingGivingAccounts && !missingFeaturedDepartments && !missingRolePermissions && !missingHomeBanner && !missingFeaturedLayout && !missingTeamLists) throw settingsError;
+        if (!missingGivingAccounts && !missingFeaturedDepartments && !missingRolePermissions && !missingHomeBanner && !missingLiveEmbed && !missingFeaturedLayout && !missingTeamLists && !missingVisitFields) throw settingsError;
 
         const {
           giving_accounts: _ignoredGivingAccounts,
@@ -557,6 +611,10 @@ export default function AdminSettings() {
           home_banner_title: _ignoredHomeBannerTitle,
           home_banner_message: _ignoredHomeBannerMessage,
           home_banner_button_label: _ignoredHomeBannerButtonLabel,
+          live_embed_enabled: _ignoredLiveEmbedEnabled,
+          live_embed_url: _ignoredLiveEmbedUrl,
+          live_embed_title: _ignoredLiveEmbedTitle,
+          live_embed_note: _ignoredLiveEmbedNote,
           featured_department_ids: _ignoredFeaturedDepartments,
           featured_department_columns: _ignoredFeaturedDepartmentColumns,
           featured_department_rows: _ignoredFeaturedDepartmentRows,
@@ -565,6 +623,9 @@ export default function AdminSettings() {
           follow_up_team_members: _ignoredFollowUpTeamMembers,
           department_team_members: _ignoredDepartmentTeamMembers,
           role_permissions: _ignoredRolePermissions,
+          visit_title: _ignoredVisitTitle,
+          visit_intro: _ignoredVisitIntro,
+          visit_items: _ignoredVisitItems,
           ...fallbackPayload
         } = siteSettingsPayload as any;
 
@@ -837,6 +898,7 @@ export default function AdminSettings() {
   const headingFontValue = (settings as any)?.heading_font || 'playfair';
   const editorialFontValue = (settings as any)?.editorial_font || 'newsreader';
   const givingAccounts = readGivingAccounts(settings);
+  const visitItems = readVisitItems(settings);
 
   const uiFontSelect = Object.prototype.hasOwnProperty.call(FONT_OPTIONS, uiFontValue) ? uiFontValue : 'custom';
   const headingFontSelect = Object.prototype.hasOwnProperty.call(FONT_OPTIONS, headingFontValue) ? headingFontValue : 'custom';
@@ -858,9 +920,11 @@ export default function AdminSettings() {
     ? [
         { id: 'typography', label: 'Typography' },
         { id: 'hero-section', label: 'Hero' },
+        { id: 'live-stream', label: 'Live' },
         { id: 'homepage-event-banner', label: 'Banner' },
         { id: 'contact-details', label: 'Contact' },
         { id: 'giving-details', label: 'Giving' },
+        { id: 'visit-section', label: 'Visit' },
         { id: 'service-times', label: 'Services' },
       ]
     : settingsMode === 'content'
@@ -1269,6 +1333,64 @@ export default function AdminSettings() {
       </CollapsiblePanel>
 
       <CollapsiblePanel
+        id="live-stream"
+        title="Live Stream"
+        description="Embed a Facebook or YouTube live video below the homepage hero."
+      >
+        <SectionSaveButton label="Save Live Stream" />
+        <h2 className="text-2xl font-serif font-bold flex items-center gap-3">
+          <Video className="w-6 h-6 text-accent" />
+          Live Stream
+        </h2>
+        <div className="space-y-6">
+          <label className="flex items-center gap-3 border border-stone-200 bg-stone-50 px-4 py-4">
+            <input
+              type="checkbox"
+              checked={Boolean((settings as any)?.live_embed_enabled)}
+              onChange={(e) => setSettings((prev) => (prev ? { ...prev, live_embed_enabled: e.target.checked } as any : null))}
+              className="h-4 w-4 accent-primary"
+            />
+            <div>
+              <p className="text-sm font-bold text-stone-900 uppercase tracking-widest">Show live stream</p>
+              <p className="text-xs text-stone-500">Appears directly under the homepage hero.</p>
+            </div>
+          </label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="space-y-3">
+              <label className="text-sm font-bold text-stone-700 uppercase tracking-widest">Title</label>
+              <input
+                type="text"
+                value={(settings as any)?.live_embed_title || ''}
+                onChange={(e) => setSettings((prev) => (prev ? { ...prev, live_embed_title: e.target.value } as any : null))}
+                className="w-full p-4 border border-stone-200 focus:ring-4 focus:ring-accent/10 outline-none transition-all bg-white"
+                placeholder="Live Service"
+              />
+            </div>
+            <div className="space-y-3">
+              <label className="text-sm font-bold text-stone-700 uppercase tracking-widest">Embed / Video Link</label>
+              <input
+                type="text"
+                value={(settings as any)?.live_embed_url || ''}
+                onChange={(e) => setSettings((prev) => (prev ? { ...prev, live_embed_url: e.target.value } as any : null))}
+                className="w-full p-4 border border-stone-200 focus:ring-4 focus:ring-accent/10 outline-none transition-all bg-white"
+                placeholder="YouTube/Facebook URL or iframe embed"
+              />
+            </div>
+          </div>
+          <div className="space-y-3">
+            <label className="text-sm font-bold text-stone-700 uppercase tracking-widest">Note</label>
+            <textarea
+              value={(settings as any)?.live_embed_note || ''}
+              onChange={(e) => setSettings((prev) => (prev ? { ...prev, live_embed_note: e.target.value } as any : null))}
+              rows={3}
+              className="w-full p-4 border border-stone-200 focus:ring-4 focus:ring-accent/10 outline-none transition-all resize-none bg-white"
+              placeholder="Join the service live from Facebook or YouTube."
+            />
+          </div>
+        </div>
+      </CollapsiblePanel>
+
+      <CollapsiblePanel
         id="homepage-event-banner"
         title="Homepage Event Banner"
         description="Promote rotating custom banners below hero section."
@@ -1663,6 +1785,67 @@ export default function AdminSettings() {
               placeholder="Optional note shown in the giving modal"
             />
           </div>
+        </div>
+      </CollapsiblePanel>
+
+      {/* Visit Section */}
+      <CollapsiblePanel
+        id="visit-section"
+        title="Ready to Visit Section"
+        description="Edit the visitor welcome text and expectation list shown on the homepage."
+      >
+        <SectionSaveButton label="Save Visit Section" />
+        <h2 className="text-2xl font-serif font-bold flex items-center gap-3">
+          <MapPin className="w-6 h-6 text-accent" />
+          Ready to Visit Section
+        </h2>
+        <div className="space-y-3">
+          <label className="text-sm font-bold text-stone-700 uppercase tracking-widest">Title</label>
+          <input
+            type="text"
+            value={(settings as any)?.visit_title || 'Ready to Visit?'}
+            onChange={e => setSettings(prev => prev ? { ...prev, visit_title: e.target.value } : null)}
+            className="w-full p-4 border border-stone-200 focus:ring-4 focus:ring-accent/10 outline-none transition-all bg-white"
+            placeholder="Ready to Visit?"
+          />
+        </div>
+        <div className="space-y-3">
+          <label className="text-sm font-bold text-stone-700 uppercase tracking-widest">Intro Text</label>
+          <textarea
+            value={(settings as any)?.visit_intro || "We can't wait to meet you. Join us this Sunday and experience the presence of God in a new way. Whether you're a lifelong believer or just exploring faith, you're welcome here."}
+            onChange={e => setSettings(prev => prev ? { ...prev, visit_intro: e.target.value } : null)}
+            rows={4}
+            className="w-full p-4 border border-stone-200 focus:ring-4 focus:ring-accent/10 outline-none transition-all resize-none"
+            placeholder="Visitor welcome message"
+          />
+        </div>
+        <div className="space-y-5">
+          {visitItems.map((item, index) => (
+            <div key={index} className="p-6 border border-stone-200 bg-stone-50/60 space-y-4">
+              <div className="flex items-center gap-3">
+                <span className="w-9 h-9 bg-primary text-white flex items-center justify-center font-serif font-bold">{index + 1}</span>
+                <p className="text-sm font-bold uppercase tracking-widest text-stone-500">Visit Item</p>
+              </div>
+              <div className="space-y-3">
+                <label className="text-sm font-bold text-stone-700 uppercase tracking-widest">Heading</label>
+                <input
+                  type="text"
+                  value={item.title}
+                  onChange={e => handleUpdateVisitItem(index, 'title', e.target.value)}
+                  className="w-full p-4 border border-stone-200 focus:ring-4 focus:ring-accent/10 outline-none transition-all bg-white"
+                />
+              </div>
+              <div className="space-y-3">
+                <label className="text-sm font-bold text-stone-700 uppercase tracking-widest">Description</label>
+                <textarea
+                  value={item.desc}
+                  onChange={e => handleUpdateVisitItem(index, 'desc', e.target.value)}
+                  rows={3}
+                  className="w-full p-4 border border-stone-200 focus:ring-4 focus:ring-accent/10 outline-none transition-all resize-none bg-white"
+                />
+              </div>
+            </div>
+          ))}
         </div>
       </CollapsiblePanel>
 
@@ -2240,6 +2423,59 @@ export default function AdminSettings() {
                 }}
                 className="w-full text-base text-stone-600 outline-none border-b border-transparent focus:border-accent bg-transparent"
               />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <label className="space-y-2">
+                  <span className="block text-[10px] font-bold uppercase tracking-widest text-stone-500">Head</span>
+                  <select
+                    value={dept.head_profile_id || ''}
+                    onChange={(e) => {
+                      const newDepts = [...departments];
+                      newDepts[index].head_profile_id = e.target.value || null;
+                      setDepartments(newDepts);
+                    }}
+                    className="w-full p-3 border border-stone-200 bg-white text-sm"
+                  >
+                    <option value="">No head</option>
+                    {profiles.map((profile) => (
+                      <option key={profile.id} value={profile.id}>{profile.full_name || profile.email || profile.id}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-2">
+                  <span className="block text-[10px] font-bold uppercase tracking-widest text-stone-500">Department Admins</span>
+                  <select
+                    multiple
+                    value={dept.admin_profile_ids || []}
+                    onChange={(e) => {
+                      const newDepts = [...departments];
+                      newDepts[index].admin_profile_ids = Array.from(e.target.selectedOptions).map((option) => option.value);
+                      setDepartments(newDepts);
+                    }}
+                    className="w-full min-h-28 p-3 border border-stone-200 bg-white text-sm"
+                  >
+                    {profiles.map((profile) => (
+                      <option key={profile.id} value={profile.id}>{profile.full_name || profile.email || profile.id}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-2">
+                  <span className="block text-[10px] font-bold uppercase tracking-widest text-stone-500">Members</span>
+                  <select
+                    multiple
+                    value={dept.member_profile_ids || []}
+                    onChange={(e) => {
+                      const newDepts = [...departments];
+                      newDepts[index].member_profile_ids = Array.from(e.target.selectedOptions).map((option) => option.value);
+                      setDepartments(newDepts);
+                    }}
+                    className="w-full min-h-28 p-3 border border-stone-200 bg-white text-sm"
+                  >
+                    {profiles.map((profile) => (
+                      <option key={profile.id} value={profile.id}>{profile.full_name || profile.email || profile.id}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
             </div>
           ))}
         </div>

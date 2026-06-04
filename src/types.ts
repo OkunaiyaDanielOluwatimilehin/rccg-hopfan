@@ -1,4 +1,4 @@
-export type AdminRole = 'admin' | 'editorial' | 'prayer' | 'counselor' | 'follow_up' | 'member';
+export type AdminRole = 'admin' | 'editorial' | 'prayer' | 'counselor' | 'follow_up' | 'department_admin' | 'member';
 
 export type AdminSection =
   | 'overview'
@@ -66,6 +66,10 @@ export interface SiteSettings {
   hero_subtitle: string;
   hero_image_url: string;
   hero_images?: string[];
+  live_embed_enabled?: boolean;
+  live_embed_url?: string;
+  live_embed_title?: string;
+  live_embed_note?: string;
   home_banner_enabled?: boolean;
   home_banner_event_ids?: string[];
   home_banner_items?: HomeBannerItem[];
@@ -96,6 +100,9 @@ export interface SiteSettings {
   giving_account_number?: string;
   giving_note?: string;
   giving_accounts?: GivingAccount[];
+  visit_title?: string;
+  visit_intro?: string;
+  visit_items?: VisitInfoItem[];
   auth_image_url?: string;
   admin_auth_image_url?: string;
   ui_font?: string;
@@ -154,6 +161,28 @@ export interface SermonNote {
   updated_at: string;
 }
 
+export interface WatchProgress {
+  id: string;
+  user_id: string;
+  content_type: string;
+  content_id: string;
+  playback_position_seconds: number;
+  duration_seconds: number;
+  completion_percentage: number;
+  completed: boolean;
+  last_viewed_at: string;
+}
+
+export interface ContentDownload {
+  id: string;
+  user_id: string;
+  content_type: string;
+  content_id: string;
+  resource_url: string;
+  resource_type: string;
+  created_at: string;
+}
+
 export interface ServiceTime {
   day: string;
   time: string;
@@ -166,6 +195,9 @@ export interface Department {
   description: string;
   icon?: string;
   image_url?: string;
+  head_profile_id?: string | null;
+  member_profile_ids?: string[];
+  admin_profile_ids?: string[];
 }
 
 export interface Leadership {
@@ -259,6 +291,11 @@ export interface GivingAccount {
   bank_name: string;
   account_name: string;
   account_number: string;
+}
+
+export interface VisitInfoItem {
+  title: string;
+  desc: string;
 }
 
 export interface Testimonial {

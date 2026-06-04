@@ -20,6 +20,12 @@ export default function DashboardOverview() {
   const [stats, setStats] = useState({
     posts: 0,
     sermons: 0,
+    views: 0,
+    downloads: 0,
+    watchTime: 0,
+    avgCompletion: 0,
+    prayerRequests: 0,
+    counselingRequests: 0,
   });
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [activityLoading, setActivityLoading] = useState(true);
@@ -27,9 +33,14 @@ export default function DashboardOverview() {
   useEffect(() => {
     async function fetchStats() {
       try {
-        const [postsRes, sermonsRes, activityRes] = await Promise.all([
+        const [postsRes, sermonsRes, viewsRes, downloadsRes, progressRes, prayerRes, counselingRes, activityRes] = await Promise.all([
           supabase.from('posts').select('id', { count: 'exact', head: true }),
           supabase.from('sermons').select('id', { count: 'exact', head: true }),
+          supabase.from('content_activity').select('id', { count: 'exact', head: true }).eq('action', 'view'),
+          supabase.from('content_downloads').select('id', { count: 'exact', head: true }),
+          supabase.from('watch_progress').select('duration_seconds,completion_percentage').limit(1000),
+          supabase.from('prayer_requests').select('id', { count: 'exact', head: true }),
+          supabase.from('counseling_requests').select('id', { count: 'exact', head: true }),
           supabase
             .from('admin_activity_logs')
             .select('id,action,entity_type,title,body,actor_name,created_at')
@@ -37,9 +48,21 @@ export default function DashboardOverview() {
             .limit(6),
         ]);
 
+        const progressRows = progressRes.error ? [] : (progressRes.data || []);
+        const totalWatchSeconds = progressRows.reduce((sum: number, row: any) => sum + (row.duration_seconds || 0), 0);
+        const avgCompletion = progressRows.length
+          ? Math.round(progressRows.reduce((sum: number, row: any) => sum + Number(row.completion_percentage || 0), 0) / progressRows.length)
+          : 0;
+
         setStats({
           posts: postsRes.count || 0,
           sermons: sermonsRes.count || 0,
+          views: viewsRes.count || 0,
+          downloads: downloadsRes.count || 0,
+          watchTime: Math.round(totalWatchSeconds / 60),
+          avgCompletion,
+          prayerRequests: prayerRes.count || 0,
+          counselingRequests: counselingRes.count || 0,
         });
 
         if (activityRes.error) {
@@ -63,6 +86,12 @@ export default function DashboardOverview() {
   const cards = [
     { name: 'Total Posts', value: stats.posts, icon: FileText, color: 'text-primary', bg: 'bg-primary/10' },
     { name: 'Total Sermons', value: stats.sermons, icon: Video, color: 'text-accent', bg: 'bg-accent/10' },
+    { name: 'Content Views', value: stats.views, icon: BarChart3, color: 'text-primary', bg: 'bg-primary/10' },
+    { name: 'Downloads', value: stats.downloads, icon: ArrowUpRight, color: 'text-accent', bg: 'bg-accent/10' },
+    { name: 'Watch Minutes', value: stats.watchTime, icon: Clock3, color: 'text-primary', bg: 'bg-primary/10' },
+    { name: 'Avg Completion', value: `${stats.avgCompletion}%`, icon: BarChart3, color: 'text-accent', bg: 'bg-accent/10' },
+    { name: 'Prayer Requests', value: stats.prayerRequests, icon: FileText, color: 'text-primary', bg: 'bg-primary/10' },
+    { name: 'Counseling Requests', value: stats.counselingRequests, icon: FileText, color: 'text-accent', bg: 'bg-accent/10' },
   ];
 
   return (
@@ -72,7 +101,7 @@ export default function DashboardOverview() {
         <p className="text-stone-500">Welcome back! Here's what's happening with your church content.</p>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-8">
+      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-8">
         {cards.map((card) => (
           <motion.div
             key={card.name}

@@ -258,13 +258,22 @@ export default function AdminDashboard() {
                         }`}
                       >
                         <div className="flex items-center gap-3">
-                          <item.icon
-                            className={`w-5 h-5 transition-colors ${
-                              active || (isNotifications && notificationCount > 0)
-                                ? 'text-white'
-                                : 'text-stone-400 group-hover:text-white'
-                            }`}
-                          />
+                          {isNotifications && notificationCount > 0 ? (
+                            <motion.span
+                              animate={{ rotate: [-10, 10, -10], scale: [1, 1.08, 1] }}
+                              transition={{ duration: 0.9, repeat: Infinity, ease: 'easeInOut' }}
+                            >
+                              <item.icon className="w-5 h-5 text-white" />
+                            </motion.span>
+                          ) : (
+                            <item.icon
+                              className={`w-5 h-5 transition-colors ${
+                                active
+                                  ? 'text-white'
+                                  : 'text-stone-400 group-hover:text-white'
+                              }`}
+                            />
+                          )}
                           {item.name}
                         </div>
                         <span className="inline-flex items-center gap-2">
@@ -458,6 +467,29 @@ export default function AdminDashboard() {
             <ArrowLeft className="w-4 h-4" /> Back to Website
           </Link>
         </div>
+        {notificationCount > 0 && role !== 'member' ? (
+          <Link
+            to="/admin/notifications"
+            className="mb-6 flex items-center justify-between gap-4 border border-accent/20 bg-accent/10 px-5 py-4 text-primary shadow-sm hover:bg-accent/15 transition-colors"
+          >
+            <div className="flex items-center gap-4 min-w-0">
+              <motion.div
+                animate={{ rotate: [-8, 8, -8] }}
+                transition={{ duration: 0.8, repeat: Infinity, ease: 'easeInOut' }}
+                className="shrink-0 bg-primary text-white p-3"
+              >
+                <Bell className="w-5 h-5" />
+              </motion.div>
+              <div className="min-w-0">
+                <p className="text-sm font-bold uppercase tracking-[0.25em]">New notifications</p>
+                <p className="text-sm text-stone-700">
+                  {notificationCount} unread alert{notificationCount > 1 ? 's' : ''}. Open notification center.
+                </p>
+              </div>
+            </div>
+            <ChevronRight className="w-5 h-5 shrink-0" />
+          </Link>
+        ) : null}
         <Outlet />
       </main>
 
@@ -494,7 +526,13 @@ export default function AdminDashboard() {
               }`}
               aria-label="Notifications"
             >
-              <Bell className={`w-4 h-4 ${notificationCount > 0 ? 'text-primary animate-pulse' : 'text-stone-400'}`} />
+              <motion.span
+                animate={notificationCount > 0 ? { rotate: [-10, 10, -10], scale: [1, 1.08, 1] } : undefined}
+                transition={notificationCount > 0 ? { duration: 0.9, repeat: Infinity, ease: 'easeInOut' } : undefined}
+                className="relative"
+              >
+                <Bell className={`w-4 h-4 ${notificationCount > 0 ? 'text-primary' : 'text-stone-400'}`} />
+              </motion.span>
               <span className="text-[8px] font-bold uppercase tracking-widest text-center leading-tight">
                 Notifications
               </span>

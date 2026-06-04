@@ -18,6 +18,7 @@ const ROLE_OPTIONS: { value: AdminRole; label: string }[] = [
   { value: 'prayer', label: 'Prayer Team' },
   { value: 'counselor', label: 'Counselor' },
   { value: 'follow_up', label: 'Follow Up' },
+  { value: 'department_admin', label: 'Department Admin' },
   { value: 'member', label: 'Member' },
 ];
 

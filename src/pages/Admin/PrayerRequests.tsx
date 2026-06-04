@@ -130,7 +130,10 @@ export default function AdminPrayerRequests() {
   };
 
   const visibleRequests = useMemo(() => {
-    if (!user || role === 'admin') return requests;
+    if (!user) return requests;
+    if (role === 'admin') {
+      return requests.filter((request) => request.assigned_team === 'admin' || request.assigned_person_id === user.id);
+    }
     const currentName = (currentProfile?.full_name || '').trim().toLowerCase();
     return requests.filter((request) =>
       request.assigned_person_id === user.id ||

@@ -45,6 +45,32 @@ function renderHeroTitle(title: string) {
   ));
 }
 
+function resolveLiveEmbedUrl(url?: string | null) {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+  if (raw.includes('<iframe')) {
+    const match = raw.match(/src=["']([^"']+)["']/i);
+    return match?.[1] || '';
+  }
+  try {
+    const parsed = new URL(raw);
+    if (parsed.hostname.includes('youtube.com')) {
+      const videoId = parsed.searchParams.get('v') || parsed.pathname.split('/').filter(Boolean).pop();
+      return videoId ? `https://www.youtube.com/embed/${videoId}` : raw;
+    }
+    if (parsed.hostname.includes('youtu.be')) {
+      const videoId = parsed.pathname.split('/').filter(Boolean)[0];
+      return videoId ? `https://www.youtube.com/embed/${videoId}` : raw;
+    }
+    if (parsed.hostname.includes('facebook.com')) {
+      return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(raw)}&show_text=false&width=1200`;
+    }
+    return raw;
+  } catch {
+    return raw;
+  }
+}
+
 export default function Home() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [sermons, setSermons] = useState<Sermon[]>([]);
@@ -117,6 +143,8 @@ export default function Home() {
   const heroTitle = settings?.hero_title || '';
   const heroSubtitle = settings?.hero_subtitle || '';
   const heroPrimaryImage = settings?.hero_image_url || '';
+  const liveEmbedUrl = resolveLiveEmbedUrl(settings?.live_embed_url);
+  const showLiveEmbed = Boolean(settings?.live_embed_enabled && liveEmbedUrl);
   const heroImages = (Array.isArray(settings?.hero_images) && settings?.hero_images.length > 0)
     ? settings.hero_images
     : (heroPrimaryImage ? [heroPrimaryImage] : []);
@@ -156,6 +184,38 @@ export default function Home() {
       setCopiedAccountIndex(null);
     }
   }, [activeModal]);
+
+  const givingAccounts = Array.isArray(settings?.giving_accounts)
+    ? settings.giving_accounts
+    : settings?.giving_bank_name || settings?.giving_account_name || settings?.giving_account_number
+      ? [{
+          section: '',
+          bank_name: settings?.giving_bank_name || '',
+          account_name: settings?.giving_account_name || '',
+          account_number: settings?.giving_account_number || '',
+        }]
+      : [];
+  const tithesOfferingAccounts = givingAccounts.filter((account) => /tithe|offering/i.test(account.section || ''));
+  const gospelFundAccounts = givingAccounts.filter((account) => /gospel/i.test(account.section || ''));
+  const otherGivingAccounts = givingAccounts.filter((account) => !/tithe|offering|gospel/i.test(account.section || ''));
+  const givingCards = [
+    { title: 'Tithes and Offering', accounts: tithesOfferingAccounts },
+    { title: 'Gospel Fund', accounts: gospelFundAccounts },
+  ];
+  if (otherGivingAccounts.length > 0) {
+    givingCards.push({ title: 'Other Giving', accounts: otherGivingAccounts });
+  }
+  const givingDisclaimer = 'For every transaction, always include clear narration for easy remittance and record keeping. Confirm the account number before sending.';
+  const visitTitle = (settings as any)?.visit_title || 'Ready to Visit?';
+  const visitIntro = (settings as any)?.visit_intro || "We can't wait to meet you. Join us this Sunday and experience the presence of God in a new way. Whether you're a lifelong believer or just exploring faith, you're welcome here.";
+  const visitItems = Array.isArray((settings as any)?.visit_items) && (settings as any).visit_items.length > 0
+    ? (settings as any).visit_items
+    : [
+        { title: "What to Expect", desc: "A typical service lasts about 90 minutes. We sing a mix of contemporary and traditional music, followed by a practical, Bible-based message." },
+        { title: "What about my kids?", desc: "We believe that kids should have a blast at church every single week. Our children's ministry provides a safe, fun environment where they can learn about God on their level." },
+        { title: "Where do I park?", desc: "We have dedicated parking for visitors right near the main entrance. Just look for the 'Visitor Parking' signs when you arrive!" },
+        { title: "What should I wear?", desc: "Come as you are! You'll see everything from suits and dresses to jeans and t-shirts. We're more interested in meeting you than in what you wear." }
+      ];
 
   const visibleEvents = useMemo(
     () => events.filter((event) => !event.published_at || new Date(event.published_at) <= new Date()),
@@ -430,6 +490,34 @@ export default function Home() {
         </div>
 
       </section>
+
+      {showLiveEmbed ? (
+        <section id="live-stream" className="w-full px-4 sm:px-8 md:px-16 py-10 bg-stone-50 border-t-2 border-stone-200">
+          <div className="grid lg:grid-cols-[0.8fr,1.2fr] gap-8 items-center">
+            <div className="space-y-5">
+              <div className="inline-flex items-center gap-3 bg-red-50 text-red-700 px-4 py-2 border border-red-100 text-xs font-bold uppercase tracking-[0.3em]">
+                <span className="h-2.5 w-2.5 bg-red-600 rounded-full animate-pulse" />
+                Live
+              </div>
+              <h2 className="text-4xl md:text-6xl font-serif font-bold text-primary">
+                {settings?.live_embed_title || 'Live Service'}
+              </h2>
+              <p className="text-lg text-stone-600 leading-relaxed">
+                {settings?.live_embed_note || 'Join the service live from Facebook or YouTube.'}
+              </p>
+            </div>
+            <div className="aspect-video bg-primary border border-stone-200 shadow-2xl shadow-primary/10 overflow-hidden">
+              <iframe
+                src={liveEmbedUrl}
+                title={settings?.live_embed_title || 'Live Service'}
+                className="h-full w-full"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+              />
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {showHomeBanner && homeBannerItem && (
         <section className="w-full px-4 sm:px-8 md:px-16 -mt-10 relative z-20">
@@ -912,7 +1000,7 @@ export default function Home() {
             id="prayer-request"
             whileHover={{ y: -10 }}
             onClick={() => setActiveModal('prayer')}
-            className="bg-white p-12 border border-stone-100 shadow-sm hover:shadow-md transition-all text-left group"
+            className="bg-white p-8 lg:p-10 border border-stone-100 shadow-sm hover:shadow-md transition-all text-left group"
           >
             <div className="w-20 h-20 bg-accent flex items-center justify-center mb-10 shadow-xl">
               <MessageSquareHeart className="w-10 h-10 text-white" />
@@ -929,7 +1017,7 @@ export default function Home() {
             id="counseling"
             whileHover={{ y: -10 }}
             onClick={() => setActiveModal('counseling')}
-            className="bg-white p-12 border border-stone-100 shadow-sm hover:shadow-md transition-all text-left group"
+            className="bg-white p-8 lg:p-10 border border-stone-100 shadow-sm hover:shadow-md transition-all text-left group"
           >
             <div className="w-20 h-20 bg-primary/10 flex items-center justify-center mb-10">
               <CircleHelp className="w-10 h-10 text-primary" />
@@ -1019,16 +1107,6 @@ export default function Home() {
                       type="button"
                       onClick={() => {
                         setActiveDepartment(dept);
-                        setDepartmentModalMode('join');
-                      }}
-                      className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.25em] text-white bg-white/10 px-3 py-2 border border-white/15 backdrop-blur-sm transition-colors hover:bg-white/20"
-                    >
-                      Join Now
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActiveDepartment(dept);
                         setDepartmentModalMode('details');
                       }}
                       className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.25em] text-accent hover:text-white transition-colors"
@@ -1092,7 +1170,7 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => setDepartmentModalMode('join')}
-                    className="inline-flex items-center gap-2 bg-accent text-white px-5 py-3 font-bold hover:bg-accent/90 transition-all shadow-lg shadow-accent/20"
+                    className="inline-flex items-center gap-2 text-accent font-bold underline underline-offset-8 hover:text-primary transition-colors"
                   >
                     Join This Department <ArrowRight className="w-4 h-4" />
                   </button>
@@ -1109,6 +1187,9 @@ export default function Home() {
                   onSubmit={(e) => handleDeptSubmit(e, activeDepartment)}
                   className="space-y-4"
                 >
+                  <p className="border border-accent/20 bg-accent/10 p-4 text-primary font-bold leading-relaxed">
+                    Serving is physical. Anyone who indicates interest must be on ground physically and is subject to screening by the head of department before serving in church.
+                  </p>
                   <div className="grid md:grid-cols-2 gap-4">
                     <input name="full_name" required type="text" placeholder="Full Name" className="w-full p-4 bg-stone-50 border border-stone-200 focus:ring-2 focus:ring-accent outline-none text-primary" />
                     <input name="email" required type="email" placeholder="Email Address" className="w-full p-4 bg-stone-50 border border-stone-200 focus:ring-2 focus:ring-accent outline-none text-primary" />
@@ -1203,18 +1284,13 @@ export default function Home() {
         <div className="flex flex-col lg:grid lg:grid-cols-2">
           <div className="bg-primary p-12 md:p-24 space-y-12 relative overflow-hidden">
             <div className="relative z-10 space-y-8">
-              <h2 className="text-4xl md:text-6xl font-serif font-bold text-white leading-tight">Ready to <span className="text-accent italic">Visit?</span></h2>
+              <h2 className="text-4xl md:text-6xl font-serif font-bold text-white leading-tight">{visitTitle}</h2>
               <p className="text-xl text-stone-300 leading-relaxed font-light">
-                We can't wait to meet you. Join us this Sunday and experience the presence of God in a new way. Whether you're a lifelong believer or just exploring faith, you're welcome here.
+                {visitIntro}
               </p>
               
               <div className="space-y-10 pt-6">
-                {[
-                  { title: "What to Expect", desc: "A typical service lasts about 90 minutes. We sing a mix of contemporary and traditional music, followed by a practical, Bible-based message." },
-                  { title: "What about my kids?", desc: "We believe that kids should have a blast at church every single week. Our children's ministry provides a safe, fun environment where they can learn about God on their level." },
-                  { title: "Where do I park?", desc: "We have dedicated parking for visitors right near the main entrance. Just look for the 'Visitor Parking' signs when you arrive!" },
-                  { title: "What should I wear?", desc: "Come as you are! You'll see everything from suits and dresses to jeans and t-shirts. We're more interested in meeting you than in what you wear." }
-                ].map((item, i) => (
+                {visitItems.map((item: any, i: number) => (
                   <div key={i} className="flex gap-8">
                     <div className="w-12 h-12 bg-white/10 flex items-center justify-center flex-shrink-0 text-accent font-serif font-bold text-2xl border border-white/10">
                       {i + 1}
@@ -1463,59 +1539,44 @@ export default function Home() {
           <p className="text-stone-500 leading-relaxed">
             {settings?.giving_note || 'You can support the ministry through bank transfer for now. We will add an online payment gateway later.'}
           </p>
-          <div className="space-y-4">
-            {(Array.isArray(settings?.giving_accounts)
-              ? settings.giving_accounts
-              : settings?.giving_bank_name || settings?.giving_account_name || settings?.giving_account_number
-                ? [{
-                    section: '',
-                    bank_name: settings?.giving_bank_name || '',
-                    account_name: settings?.giving_account_name || '',
-                    account_number: settings?.giving_account_number || '',
-                  }]
-                : []
-            ).map((account, index) => (
-              <div key={`${account.section || account.account_number || account.account_name || index}`} className="grid md:grid-cols-3 gap-4">
-                <div className="md:col-span-3">
-                  <p className="inline-flex items-center rounded-full bg-primary/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.25em] text-primary">
-                    {account.section || 'General Giving'}
-                  </p>
+          <div className="grid gap-12">
+            {givingCards.map((card) => (
+              <div key={card.title} className="border border-stone-100 bg-white p-8 shadow-sm space-y-8">
+                <div className="w-16 h-16 bg-primary/10 flex items-center justify-center">
+                  <Landmark className="w-8 h-8 text-primary" />
                 </div>
-                <div className="p-5 rounded-xl border border-stone-200 bg-stone-50/70">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-stone-400 mb-2">Bank</p>
-                  <p className="text-lg font-bold text-primary">{account.bank_name || 'Add in Admin'}</p>
-                </div>
-                <div className="p-5 rounded-xl border border-stone-200 bg-stone-50/70">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-stone-400 mb-2">Account Name</p>
-                  <p className="text-lg font-bold text-primary">{account.account_name || 'Add in Admin'}</p>
-                </div>
-                <div className="p-5 rounded-xl border border-stone-200 bg-stone-50/70">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-stone-400 mb-2">Account Number</p>
-                  <div className="flex items-center gap-3">
-                    <p className="text-lg font-bold text-primary tracking-widest break-all">{account.account_number || 'Add in Admin'}</p>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        const accountNumber = account.account_number?.trim();
-                        if (!accountNumber) return;
-                        try {
+                <h3 className="text-3xl font-serif font-bold text-primary">{card.title}</h3>
+                {card.accounts.length === 0 ? (
+                  <p className="border border-dashed border-stone-200 bg-stone-50 p-5 text-stone-400">Account details will be added from dashboard.</p>
+                ) : card.accounts.map((account, index) => (
+                  <div key={`${card.title}-${account.account_number || index}`} className="grid md:grid-cols-3 gap-5">
+                    <div className="p-5 border border-stone-200 bg-stone-50/70">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-stone-400 mb-2">Bank</p>
+                      <p className="text-lg font-bold text-primary">{account.bank_name || 'Add in Admin'}</p>
+                    </div>
+                    <div className="p-5 border border-stone-200 bg-stone-50/70">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-stone-400 mb-2">Account Name</p>
+                      <p className="text-lg font-bold text-primary">{account.account_name || 'Add in Admin'}</p>
+                    </div>
+                    <div className="p-5 border border-stone-200 bg-stone-50/70">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-stone-400 mb-2">Account Number</p>
+                      <div className="flex items-center gap-3">
+                        <p className="text-lg font-bold text-primary tracking-widest break-all">{account.account_number || 'Add in Admin'}</p>
+                        <button type="button" onClick={async () => {
+                          const accountNumber = account.account_number?.trim();
+                          if (!accountNumber) return;
                           await navigator.clipboard.writeText(accountNumber);
-                          setCopiedAccountIndex(index);
-                          window.setTimeout(() => {
-                            setCopiedAccountIndex((current) => (current === index ? null : current));
-                          }, 1800);
-                        } catch (error) {
-                          console.error('Failed to copy account number:', error);
-                        }
-                      }}
-                      disabled={!account.account_number}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-primary text-white text-xs font-bold uppercase tracking-widest hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                    >
-                      <Copy className="w-4 h-4" />
-                      {copiedAccountIndex === index ? 'Copied' : 'Copy'}
-                    </button>
+                          setCopiedAccountIndex(givingAccounts.indexOf(account));
+                          window.setTimeout(() => setCopiedAccountIndex(null), 1800);
+                        }} disabled={!account.account_number} className="inline-flex items-center gap-2 px-3 py-2 bg-primary text-white text-xs font-bold uppercase tracking-widest hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                          <Copy className="w-4 h-4" />
+                          {copiedAccountIndex === givingAccounts.indexOf(account) ? 'Copied' : 'Copy'}
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                ))}
+                <p className="text-sm leading-relaxed text-primary font-bold">{givingDisclaimer}</p>
               </div>
             ))}
           </div>

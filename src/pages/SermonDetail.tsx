@@ -10,6 +10,7 @@ import Modal from '../components/Modal';
 import AudioPlayer from '../components/AudioPlayer';
 import MarkdownContent from '../components/MarkdownContent';
 import Seo from '../components/Seo';
+import { dismissAccountPrompt, recordContentActivity, recordDownload, shouldShowAccountPrompt } from '../services/engagementService';
 
 export default function SermonDetail() {
   const { id } = useParams();
@@ -19,6 +20,7 @@ export default function SermonDetail() {
   const [detailTab, setDetailTab] = useState<'about' | 'comments' | 'notes'>('about');
   const [aboutExpanded, setAboutExpanded] = useState(false);
   const [contentExpanded, setContentExpanded] = useState(false);
+  const [accountPromptOpen, setAccountPromptOpen] = useState(false);
   const { user } = useAuth();
 
   const shareUrl = useMemo(() => (typeof window !== 'undefined' ? window.location.href : ''), []);
@@ -221,6 +223,30 @@ export default function SermonDetail() {
       setActiveTab(availableTabs[0]);
     }
   }, [availableTabs, activeTab]);
+
+  useEffect(() => {
+    if (!sermon?.id) return;
+    recordContentActivity({
+      userId: user?.id,
+      contentType: activeTab === 'audio' ? 'audio' : 'sermon',
+      contentId: sermon.id,
+      action: 'view',
+      metadata: { title: sermon.title, category: sermon.category, speaker: sermon.speaker_name },
+    }).then(() => {
+      if (!user && shouldShowAccountPrompt()) setAccountPromptOpen(true);
+    });
+  }, [sermon?.id, activeTab, user?.id]);
+
+  const handleDownloadAudio = async () => {
+    if (!sermon?.audio_url || !id) return;
+    if (!user) {
+      setAccountPromptOpen(true);
+      return;
+    }
+    await recordDownload(user.id, 'audio', id, sermon.audio_url, 'audio');
+    await recordContentActivity({ userId: user.id, contentType: 'audio', contentId: id, action: 'download' });
+    window.open(sermon.audio_url, '_blank', 'noopener,noreferrer');
+  };
 
   const handleShare = async () => {
     if (!sermon) return;
@@ -579,16 +605,15 @@ export default function SermonDetail() {
                         <Share2 className="w-4 h-4" />
                         <span className="sr-only">Share</span>
                       </button>
-                      <a
-                        href={sermon.audio_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        type="button"
+                        onClick={handleDownloadAudio}
                         className="inline-flex items-center justify-center w-11 h-11 bg-white border border-stone-200 text-stone-700 hover:bg-stone-50 transition-all"
                         title="Download audio"
                       >
                         <Download className="w-4 h-4" />
                         <span className="sr-only">Download</span>
-                      </a>
+                      </button>
                     </div>
                   </div>
 
@@ -639,10 +664,9 @@ export default function SermonDetail() {
                             <Share2 className="w-4 h-4 shrink-0 text-white" />
                           </span>
                         </button>
-                        <a
-                          href={sermon.audio_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
+                          type="button"
+                          onClick={handleDownloadAudio}
                           className="inline-flex items-center gap-2 text-white transition-opacity ml-auto"
                           title="Download audio"
                           aria-label="Download audio"
@@ -650,7 +674,7 @@ export default function SermonDetail() {
                           <span className="inline-flex items-center justify-center w-7 h-7 rounded-full border border-white/15 bg-white/5">
                             <Download className="w-4 h-4" />
                           </span>
-                        </a>
+                        </button>
                       </>
                     }
                   />
@@ -992,6 +1016,39 @@ export default function SermonDetail() {
             {saveMessage ? <p className="text-sm font-medium text-stone-700">{saveMessage}</p> : null}
           </div>
         )}
+      </Modal>
+      <Modal
+        isOpen={accountPromptOpen}
+        onClose={() => {
+          dismissAccountPrompt();
+          setAccountPromptOpen(false);
+        }}
+        title="Create a free account"
+      >
+        <div className="space-y-5">
+          <p className="text-stone-600 leading-relaxed">
+            Create a free account to save your progress, continue watching across devices, download resources, create playlists,
+            take notes, save favorites, and receive personalized recommendations.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <Link to="/register" className="px-6 py-3 bg-accent text-white font-bold uppercase tracking-widest text-xs hover:bg-accent/90 transition-all">
+              Create Account
+            </Link>
+            <Link to="/login" className="px-6 py-3 bg-primary text-white font-bold uppercase tracking-widest text-xs hover:bg-primary/90 transition-all">
+              Login
+            </Link>
+            <button
+              type="button"
+              onClick={() => {
+                dismissAccountPrompt();
+                setAccountPromptOpen(false);
+              }}
+              className="px-6 py-3 border border-stone-200 text-stone-600 font-bold uppercase tracking-widest text-xs hover:bg-stone-50 transition-all"
+            >
+              Keep Browsing
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );
