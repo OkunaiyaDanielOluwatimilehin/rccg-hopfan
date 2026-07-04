@@ -14,6 +14,8 @@ import {
   CalendarDays,
   ClipboardList,
   Bell,
+  ListChecks,
+  Search,
 } from 'lucide-react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
@@ -31,6 +33,7 @@ export default function AdminDashboard() {
   const [checkingAdmin, setCheckingAdmin] = useState(true);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [notificationCount, setNotificationCount] = useState(0);
+  const [navSearch, setNavSearch] = useState('');
   const [openSidebarGroups, setOpenSidebarGroups] = useState({
     core: true,
     requests: true,
@@ -45,6 +48,7 @@ export default function AdminDashboard() {
     { name: 'Devotionals', path: '/admin/devotionals', icon: BookOpen, section: 'devotionals' as const },
     { name: 'Events', path: '/admin/events', icon: CalendarDays, section: 'events' as const },
     { name: 'Testimonials', path: '/admin/testimonials', icon: MessageSquare, section: 'testimonials' as const },
+    { name: 'Forms', path: '/admin/forms', icon: ListChecks, section: 'forms' as const },
   ];
 
   const settingsItems = [
@@ -184,9 +188,10 @@ export default function AdminDashboard() {
     navigate('/admin/login');
   };
 
-  const visibleMenuItems = menuItems.filter((item) => canAccessSection(role, item.section, rolePermissions));
-  const visibleContentItems = contentItems.filter((item) => canAccessSection(role, item.section, rolePermissions));
-  const visibleSettingsItems = settingsItems.filter((item) => canAccessSection(role, item.section, rolePermissions));
+  const matchesNavSearch = (name: string) => name.toLowerCase().includes(navSearch.trim().toLowerCase());
+  const visibleMenuItems = menuItems.filter((item) => canAccessSection(role, item.section, rolePermissions) && matchesNavSearch(item.name));
+  const visibleContentItems = contentItems.filter((item) => canAccessSection(role, item.section, rolePermissions) && matchesNavSearch(item.name));
+  const visibleSettingsItems = settingsItems.filter((item) => canAccessSection(role, item.section, rolePermissions) && matchesNavSearch(item.name));
   const coreItems = visibleMenuItems.filter((item) => ['overview', 'notifications', 'users'].includes(item.section));
   const requestItems = visibleMenuItems.filter((item) => ['prayer_requests', 'counseling_requests', 'follow_up'].includes(item.section));
   const departmentItems = visibleMenuItems.filter((item) => ['department_requests'].includes(item.section));
@@ -230,7 +235,16 @@ export default function AdminDashboard() {
           </Link>
         </div>
 
-        <nav className="flex-grow p-4 space-y-4">
+        <nav className="flex-grow p-4 space-y-4 overflow-y-auto">
+          <label className="relative block">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
+            <input
+              value={navSearch}
+              onChange={(e) => setNavSearch(e.target.value)}
+              className="w-full border border-white/10 bg-white/10 py-2.5 pl-10 pr-3 text-sm text-white placeholder:text-stone-400 outline-none focus:border-accent"
+              placeholder="Search admin..."
+            />
+          </label>
           {coreItems.length > 0 ? (
             <div className="space-y-1">
               <button

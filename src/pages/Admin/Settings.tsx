@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { SiteSettings, Department, Leadership, GalleryItem, Devotional, NewsletterSubscription, ChurchEvent, GivingAccount, AdminRole, AdminSection, RolePermissions, HomeBannerItem } from '../../types';
-import { Save, Plus, Trash2, Image as ImageIcon, Users, Clock, Info, Upload, Loader2, BookOpen, Mail, Calendar, Sparkles, ChevronUp, ChevronDown, Type, MapPin, Landmark, Video } from 'lucide-react';
+import { Save, Plus, Trash2, Image as ImageIcon, Users, Clock, Info, Upload, Loader2, BookOpen, Mail, Calendar, Sparkles, ChevronUp, ChevronDown, Type, MapPin, Landmark, Video, Search } from 'lucide-react';
 import { motion } from 'motion/react';
 import { supabase } from '../../lib/supabase';
 import { uploadToR2ViaPresign, uploadToSupabasePublicBucket } from '../../services/uploadService';
@@ -67,6 +67,14 @@ function normalizeGivingAccounts(accounts: GivingAccount[]) {
       account_number: String(account?.account_number || '').trim(),
     }))
     .filter((account) => account.section || account.bank_name || account.account_name || account.account_number);
+}
+
+function readSocialLinks(settings: SiteSettings | null) {
+  return Array.isArray((settings as any)?.social_links)
+    ? ((settings as any).social_links as any[])
+        .map((link) => ({ label: String(link?.label || '').trim(), url: String(link?.url || '').trim() }))
+        .filter((link) => link.label || link.url)
+    : [];
 }
 
 function readVisitItems(settings: SiteSettings | null) {
@@ -149,6 +157,7 @@ function resolveSectionMode(title: string): SettingsMode {
     case 'Service Times':
       return 'overview';
     case 'About Us':
+    case 'Social Links':
     case 'Mission & Vision':
     case "Pastor's Welcome":
       return 'content';
@@ -160,7 +169,6 @@ function resolveSectionMode(title: string): SettingsMode {
     case 'Prayer & Teams':
     case 'Gallery Images':
     case 'Newsletter Subscribers':
-    case 'Access Matrix':
       return 'community';
     default:
       return 'overview';
@@ -184,6 +192,7 @@ function CollapsiblePanel({
   defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
+  if (title === 'Access Matrix') return null;
   const [open, setOpen] = useState(defaultOpen);
   const location = useLocation();
   const currentMode = resolveSettingsMode(location.pathname);
@@ -225,6 +234,7 @@ export default function AdminSettings() {
   const [subscribers, setSubscribers] = useState<NewsletterSubscription[]>([]);
   const [profiles, setProfiles] = useState<ProfileOption[]>([]);
   const [newHeroImageUrl, setNewHeroImageUrl] = useState('');
+  const [settingsSearch, setSettingsSearch] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -464,6 +474,32 @@ export default function AdminSettings() {
     });
   };
 
+  const handleAddSocialLink = () => {
+    setSettings(prev => {
+      if (!prev) return null;
+      return { ...prev, social_links: [...readSocialLinks(prev), { label: '', url: '' }] } as any;
+    });
+  };
+
+  const handleUpdateSocialLink = (index: number, field: 'label' | 'url', value: string) => {
+    setSettings(prev => {
+      if (!prev) return null;
+      const current = [...readSocialLinks(prev)];
+      if (!current[index]) return prev;
+      current[index] = { ...current[index], [field]: value };
+      return { ...prev, social_links: current } as any;
+    });
+  };
+
+  const handleDeleteSocialLink = (index: number) => {
+    setSettings(prev => {
+      if (!prev) return null;
+      const current = [...readSocialLinks(prev)];
+      current.splice(index, 1);
+      return { ...prev, social_links: current } as any;
+    });
+  };
+
   const handleUpdateVisitItem = (index: number, field: 'title' | 'desc', value: string) => {
     setSettings(prev => {
       if (!prev) return null;
@@ -531,6 +567,7 @@ export default function AdminSettings() {
         service_times: Array.isArray((settings as any).service_times) ? (settings as any).service_times : [],
         contact_email: (settings as any).contact_email ?? null,
         address: (settings as any).address ?? null,
+        social_links: readSocialLinks(settings),
         giving_accounts: normalizedGivingAccounts,
         giving_bank_name: primaryGivingAccount?.bank_name ?? null,
         giving_account_name: primaryGivingAccount?.account_name ?? null,
@@ -600,8 +637,12 @@ export default function AdminSettings() {
           msg.includes('column "visit_title"') ||
           msg.includes('column "visit_intro"') ||
           msg.includes('column "visit_items"');
+        const missingSocialLinks =
+          (msg.includes('schema cache') && msg.includes('social_links')) ||
+          msg.includes('column "social_links"') ||
+          msg.includes("Could not find the 'social_links' column");
 
-        if (!missingGivingAccounts && !missingFeaturedDepartments && !missingRolePermissions && !missingHomeBanner && !missingLiveEmbed && !missingFeaturedLayout && !missingTeamLists && !missingVisitFields) throw settingsError;
+        if (!missingGivingAccounts && !missingFeaturedDepartments && !missingRolePermissions && !missingHomeBanner && !missingLiveEmbed && !missingFeaturedLayout && !missingTeamLists && !missingVisitFields && !missingSocialLinks) throw settingsError;
 
         const {
           giving_accounts: _ignoredGivingAccounts,
@@ -626,6 +667,7 @@ export default function AdminSettings() {
           visit_title: _ignoredVisitTitle,
           visit_intro: _ignoredVisitIntro,
           visit_items: _ignoredVisitItems,
+          social_links: _ignoredSocialLinks,
           ...fallbackPayload
         } = siteSettingsPayload as any;
 
@@ -898,6 +940,7 @@ export default function AdminSettings() {
   const headingFontValue = (settings as any)?.heading_font || 'playfair';
   const editorialFontValue = (settings as any)?.editorial_font || 'newsreader';
   const givingAccounts = readGivingAccounts(settings);
+  const socialLinks = readSocialLinks(settings);
   const visitItems = readVisitItems(settings);
 
   const uiFontSelect = Object.prototype.hasOwnProperty.call(FONT_OPTIONS, uiFontValue) ? uiFontValue : 'custom';
@@ -930,6 +973,7 @@ export default function AdminSettings() {
     : settingsMode === 'content'
       ? [
           { id: 'about-us', label: 'About Us' },
+          { id: 'social-links', label: 'Social Links' },
           { id: 'mission-vision', label: 'Mission & Vision' },
           { id: 'pastor-welcome', label: 'Pastor' },
         ]
@@ -941,10 +985,10 @@ export default function AdminSettings() {
         : [
             { id: 'church-leadership', label: 'Leadership' },
             { id: 'church-departments', label: 'Departments' },
-          { id: 'gallery-images', label: 'Gallery' },
-          { id: 'newsletter-subscribers', label: 'Newsletter' },
-          { id: 'access-matrix', label: 'Access Matrix' },
+            { id: 'gallery-images', label: 'Gallery' },
+            { id: 'newsletter-subscribers', label: 'Newsletter' },
         ];
+  const filteredSettingsNav = settingsNav.filter((item) => item.label.toLowerCase().includes(settingsSearch.trim().toLowerCase()));
 
   const SectionSaveButton = ({ label = 'Save Changes' }: { label?: string }) => (
     <div className="mb-6 flex justify-end">
@@ -1020,8 +1064,18 @@ export default function AdminSettings() {
           </Link>
         </div>
 
+        <div className="bg-white border border-stone-200 p-3 shadow-sm space-y-3">
+          <label className="relative block">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
+            <input
+              value={settingsSearch}
+              onChange={(e) => setSettingsSearch(e.target.value)}
+              className="w-full rounded-xl border border-stone-200 bg-stone-50 py-3 pl-10 pr-4 text-sm outline-none focus:border-accent focus:bg-white"
+              placeholder="Search settings sections..."
+            />
+          </label>
         <div className="flex gap-2 overflow-x-auto pb-1">
-          {settingsNav.map((item) => (
+          {filteredSettingsNav.map((item) => (
             <a
               key={item.id}
               href={`#${item.id}`}
@@ -1030,6 +1084,8 @@ export default function AdminSettings() {
               {item.label}
             </a>
           ))}
+          {filteredSettingsNav.length === 0 ? <p className="px-2 py-1.5 text-sm text-stone-500">No matching settings section.</p> : null}
+        </div>
         </div>
 
         <div className="flex justify-end">
@@ -1926,7 +1982,7 @@ export default function AdminSettings() {
       <CollapsiblePanel
         id="about-us"
         title="About Us"
-        description="Homepage about section."
+        description="Homepage and About page intro content."
       >
         <SectionSaveButton label="Save About Us" />
         <h2 className="text-2xl font-serif font-bold flex items-center gap-3">
@@ -1950,6 +2006,38 @@ export default function AdminSettings() {
             rows={10}
             placeholder="Write the About Us section content..."
           />
+        </div>
+      </CollapsiblePanel>
+
+      <CollapsiblePanel
+        id="social-links"
+        title="Social Links"
+        description="Links shown in the footer and About page."
+      >
+        <SectionSaveButton label="Save Social Links" />
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <h2 className="text-2xl font-serif font-bold flex items-center gap-3">
+              <Mail className="w-6 h-6 text-accent" />
+              Social Links
+            </h2>
+            <p className="text-sm text-stone-500 mt-2">Add Instagram, Facebook, YouTube, TikTok, X, or any public link.</p>
+          </div>
+          <button type="button" onClick={handleAddSocialLink} className="inline-flex items-center gap-2 bg-primary px-4 py-3 text-sm font-bold uppercase tracking-widest text-white">
+            <Plus className="w-4 h-4" /> Add Link
+          </button>
+        </div>
+        {socialLinks.length === 0 ? <p className="text-sm text-stone-500 border border-dashed border-stone-200 bg-stone-50 p-5">No social links yet.</p> : null}
+        <div className="space-y-3">
+          {socialLinks.map((link, index) => (
+            <div key={index} className="grid gap-3 sm:grid-cols-[12rem_1fr_auto]">
+              <input value={link.label} onChange={(e) => handleUpdateSocialLink(index, 'label', e.target.value)} className="border border-stone-200 p-3 outline-none" placeholder="Instagram" />
+              <input value={link.url} onChange={(e) => handleUpdateSocialLink(index, 'url', e.target.value)} className="border border-stone-200 p-3 outline-none" placeholder="https://..." />
+              <button type="button" onClick={() => handleDeleteSocialLink(index)} className="px-4 py-3 text-rose-700 font-bold">
+                Remove
+              </button>
+            </div>
+          ))}
         </div>
       </CollapsiblePanel>
 
@@ -2423,59 +2511,6 @@ export default function AdminSettings() {
                 }}
                 className="w-full text-base text-stone-600 outline-none border-b border-transparent focus:border-accent bg-transparent"
               />
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <label className="space-y-2">
-                  <span className="block text-[10px] font-bold uppercase tracking-widest text-stone-500">Head</span>
-                  <select
-                    value={dept.head_profile_id || ''}
-                    onChange={(e) => {
-                      const newDepts = [...departments];
-                      newDepts[index].head_profile_id = e.target.value || null;
-                      setDepartments(newDepts);
-                    }}
-                    className="w-full p-3 border border-stone-200 bg-white text-sm"
-                  >
-                    <option value="">No head</option>
-                    {profiles.map((profile) => (
-                      <option key={profile.id} value={profile.id}>{profile.full_name || profile.email || profile.id}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="space-y-2">
-                  <span className="block text-[10px] font-bold uppercase tracking-widest text-stone-500">Department Admins</span>
-                  <select
-                    multiple
-                    value={dept.admin_profile_ids || []}
-                    onChange={(e) => {
-                      const newDepts = [...departments];
-                      newDepts[index].admin_profile_ids = Array.from(e.target.selectedOptions).map((option) => option.value);
-                      setDepartments(newDepts);
-                    }}
-                    className="w-full min-h-28 p-3 border border-stone-200 bg-white text-sm"
-                  >
-                    {profiles.map((profile) => (
-                      <option key={profile.id} value={profile.id}>{profile.full_name || profile.email || profile.id}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="space-y-2">
-                  <span className="block text-[10px] font-bold uppercase tracking-widest text-stone-500">Members</span>
-                  <select
-                    multiple
-                    value={dept.member_profile_ids || []}
-                    onChange={(e) => {
-                      const newDepts = [...departments];
-                      newDepts[index].member_profile_ids = Array.from(e.target.selectedOptions).map((option) => option.value);
-                      setDepartments(newDepts);
-                    }}
-                    className="w-full min-h-28 p-3 border border-stone-200 bg-white text-sm"
-                  >
-                    {profiles.map((profile) => (
-                      <option key={profile.id} value={profile.id}>{profile.full_name || profile.email || profile.id}</option>
-                    ))}
-                  </select>
-                </label>
-              </div>
             </div>
           ))}
         </div>

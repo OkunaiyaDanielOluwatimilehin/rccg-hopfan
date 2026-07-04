@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, Link } from 'react-router-dom';
 import Navbar from './Navbar';
-import { Mail, MapPin } from 'lucide-react';
+import { ExternalLink, Mail, MapPin } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { SiteSettings } from '../types';
 
@@ -19,6 +19,7 @@ export default function Layout() {
 
   const address = settings?.address || '123 Faith Lane, Grace City, GC 12345';
   const email = settings?.contact_email || 'contact@rccghopfan.org';
+  const socialLinks = Array.isArray((settings as any)?.social_links) ? (settings as any).social_links.filter((link: any) => link?.label && link?.url) : [];
 
   return (
     <div className="min-h-screen flex flex-col overflow-x-hidden">
@@ -78,6 +79,15 @@ export default function Layout() {
                 <li><Link to={{ pathname: '/', hash: '#counseling' }} className="hover:text-accent transition-colors">Counseling</Link></li>
                 <li><Link to={{ pathname: '/', hash: '#giving' }} className="hover:text-accent transition-colors">Giving</Link></li>
               </ul>
+              {socialLinks.length > 0 ? (
+                <div className="mt-6 flex flex-wrap gap-2">
+                  {socialLinks.map((link: any) => (
+                    <a key={`${link.label}-${link.url}`} href={link.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 border border-white/10 px-3 py-2 text-xs font-bold text-stone-200 hover:border-accent hover:text-accent transition-colors">
+                      {link.label} <ExternalLink className="w-3 h-3" />
+                    </a>
+                  ))}
+                </div>
+              ) : null}
             </div>
           </div>
 

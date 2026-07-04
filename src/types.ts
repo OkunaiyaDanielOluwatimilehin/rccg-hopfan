@@ -14,7 +14,8 @@ export type AdminSection =
   | 'counseling_requests'
   | 'follow_up'
   | 'department_requests'
-  | 'departments';
+  | 'departments'
+  | 'forms';
 
 export type RolePermissions = Record<AdminRole, Partial<Record<AdminSection, boolean>>>;
 
@@ -95,6 +96,7 @@ export interface SiteSettings {
   contact_email: string;
   contact_phone: string;
   address: string;
+  social_links?: SocialLink[];
   giving_bank_name?: string;
   giving_account_name?: string;
   giving_account_number?: string;
@@ -180,6 +182,47 @@ export interface ContentDownload {
   content_id: string;
   resource_url: string;
   resource_type: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface SocialLink {
+  label: string;
+  url: string;
+}
+
+export type CustomFormFieldType = 'short_text' | 'long_text' | 'email' | 'phone' | 'number' | 'date' | 'select' | 'checkbox';
+
+export interface CustomFormField {
+  id: string;
+  label: string;
+  type: CustomFormFieldType;
+  required?: boolean;
+  options?: string[];
+}
+
+export interface CustomForm {
+  id: string;
+  title: string;
+  description?: string | null;
+  slug: string;
+  status: 'draft' | 'published';
+  fields: CustomFormField[];
+  header_image_url?: string | null;
+  theme_color?: string | null;
+  accent_color?: string | null;
+  background_color?: string | null;
+  style?: Record<string, unknown> | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CustomFormEntry {
+  id: string;
+  form_id: string;
+  values: Record<string, unknown>;
+  submitted_by?: string | null;
   created_at: string;
 }
 

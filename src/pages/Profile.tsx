@@ -28,6 +28,7 @@ export default function Profile() {
   const [notes, setNotes] = useState<SermonNote[]>([]);
   const [playlists, setPlaylists] = useState<SermonPlaylist[]>([]);
   const [downloads, setDownloads] = useState<ContentDownload[]>([]);
+  const [contentTitles, setContentTitles] = useState<Record<string, string>>({});
 
   const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
   const ALLOWED_AVATAR_TYPES = useMemo(() => new Set(['image/jpeg', 'image/png', 'image/webp']), []);
@@ -57,10 +58,19 @@ export default function Profile() {
         setProfile(data as ProfileRow);
         setFullName((data as any).full_name || '');
       }
-      if (!progressRes.error) setProgress((progressRes.data || []) as WatchProgress[]);
+      const progressRows = !progressRes.error ? ((progressRes.data || []) as WatchProgress[]) : [];
+      const downloadRows = !downloadsRes.error ? ((downloadsRes.data || []) as ContentDownload[]) : [];
+      if (!progressRes.error) setProgress(progressRows);
       if (!notesRes.error) setNotes((notesRes.data || []) as SermonNote[]);
       if (!playlistsRes.error) setPlaylists((playlistsRes.data || []) as SermonPlaylist[]);
-      if (!downloadsRes.error) setDownloads((downloadsRes.data || []) as ContentDownload[]);
+      if (!downloadsRes.error) setDownloads(downloadRows);
+      const sermonIds = [...progressRows, ...downloadRows]
+        .filter((item) => item.content_type === 'sermon' || item.content_type === 'audio')
+        .map((item) => item.content_id);
+      if (sermonIds.length) {
+        const { data: sermonRows } = await supabase.from('sermons').select('id,title').in('id', Array.from(new Set(sermonIds)));
+        setContentTitles(Object.fromEntries((sermonRows || []).map((row: any) => [row.id, row.title])));
+      }
       setLoading(false);
     };
     init();
@@ -216,7 +226,7 @@ export default function Profile() {
             <h2 className="text-xl font-bold text-primary">Continue Watching</h2>
             {progress.length === 0 ? <p className="text-stone-500">No saved progress yet.</p> : progress.map((item) => (
               <Link key={item.id} to={item.content_type === 'sermon' || item.content_type === 'audio' ? `/sermons/${item.content_id}` : '#'} className="block border border-stone-100 bg-stone-50 p-4">
-                <p className="font-bold text-primary capitalize">{item.content_type}</p>
+                <p className="font-bold text-primary">{contentTitles[item.content_id] || item.content_type}</p>
                 <p className="text-sm text-stone-500">{Math.round(item.completion_percentage)}% complete</p>
               </Link>
             ))}
@@ -244,7 +254,7 @@ export default function Profile() {
             <h2 className="text-xl font-bold text-primary">Downloads</h2>
             {downloads.length === 0 ? <p className="text-stone-500">No downloads yet.</p> : downloads.map((download) => (
               <a key={download.id} href={download.resource_url} target="_blank" rel="noopener noreferrer" className="block border border-stone-100 bg-stone-50 p-4">
-                <p className="font-bold text-primary capitalize">{download.resource_type}</p>
+                <p className="font-bold text-primary">{download.title || (download.metadata as any)?.title || contentTitles[download.content_id] || download.resource_type}</p>
                 <p className="text-sm text-stone-500">{new Date(download.created_at).toLocaleDateString()}</p>
               </a>
             ))}

@@ -1426,6 +1426,7 @@ export default function Home() {
                 email: 'anonymous@rccghopfam.local',
                 message: prayerMessage,
                 status: 'new',
+                assigned_team: 'prayer_team',
                 is_private: formData.get('private') === 'on',
               };
 
@@ -1438,6 +1439,7 @@ export default function Home() {
                   email: 'anonymous@rccghopfam.local',
                   message: prayerMessage,
                   status: 'new',
+                  assigned_team: 'prayer_team',
                   is_private: formData.get('private') === 'on',
                 });
                 if (retry.error) throw retry.error;
@@ -1490,6 +1492,7 @@ export default function Home() {
                 reason: counselorReason,
                 preferred_time: preferredTimeIso,
                 status: 'new',
+                assigned_team: 'counseling_team',
               });
               if (error) throw error;
               alert('Counseling request submitted. We will contact you soon!');

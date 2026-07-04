@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Sermon, SermonComment, SermonNote } from '../types';
 import { Calendar, ArrowLeft, Play, Music, FileText, Share2, Download, Loader2, Bookmark, MessageSquare, ThumbsUp, UserRound, Tag, Trash2 } from 'lucide-react';
@@ -10,7 +10,38 @@ import Modal from '../components/Modal';
 import AudioPlayer from '../components/AudioPlayer';
 import MarkdownContent from '../components/MarkdownContent';
 import Seo from '../components/Seo';
-import { dismissAccountPrompt, recordContentActivity, recordDownload, shouldShowAccountPrompt } from '../services/engagementService';
+import { dismissAccountPrompt, recordContentActivity, recordDownload, shouldShowAccountPrompt, upsertWatchProgress } from '../services/engagementService';
+
+function resolveVideoEmbedUrl(value?: string | null) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (raw.includes('<iframe')) {
+    const match = raw.match(/src=["']([^"']+)["']/i);
+    return match?.[1] || raw;
+  }
+  try {
+    const parsed = new URL(raw);
+    const host = parsed.hostname.replace(/^www\./, '');
+    if (host.includes('youtube.com')) {
+      const videoId = parsed.searchParams.get('v') || parsed.pathname.split('/').filter(Boolean).pop();
+      return videoId ? `https://www.youtube.com/embed/${videoId}` : raw;
+    }
+    if (host === 'youtu.be') {
+      const videoId = parsed.pathname.split('/').filter(Boolean)[0];
+      return videoId ? `https://www.youtube.com/embed/${videoId}` : raw;
+    }
+    if (host.includes('facebook.com') || host.includes('fb.watch')) {
+      return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(raw)}&show_text=false&width=1200`;
+    }
+    if (host.includes('vimeo.com')) {
+      const videoId = parsed.pathname.split('/').filter(Boolean).pop();
+      return videoId ? `https://player.vimeo.com/video/${videoId}` : raw;
+    }
+    return raw;
+  } catch {
+    return raw;
+  }
+}
 
 export default function SermonDetail() {
   const { id } = useParams();
@@ -21,7 +52,10 @@ export default function SermonDetail() {
   const [aboutExpanded, setAboutExpanded] = useState(false);
   const [contentExpanded, setContentExpanded] = useState(false);
   const [accountPromptOpen, setAccountPromptOpen] = useState(false);
+  const [resumePosition, setResumePosition] = useState(0);
+  const lastProgressSaveRef = useRef(0);
   const { user } = useAuth();
+  const videoEmbedUrl = useMemo(() => resolveVideoEmbedUrl(sermon?.video_url), [sermon?.video_url]);
 
   const shareUrl = useMemo(() => (typeof window !== 'undefined' ? window.location.href : ''), []);
   const availableTabs = useMemo(
@@ -86,6 +120,29 @@ export default function SermonDetail() {
     }
     fetchSermon();
   }, [id]);
+
+  useEffect(() => {
+    const loadSavedProgress = async () => {
+      if (!user || !id) {
+        setResumePosition(0);
+        return;
+      }
+      const { data, error } = await supabase
+        .from('watch_progress')
+        .select('playback_position_seconds,completion_percentage,completed')
+        .eq('user_id', user.id)
+        .eq('content_type', 'audio')
+        .eq('content_id', id)
+        .maybeSingle();
+      if (error) {
+        setResumePosition(0);
+        return;
+      }
+      const row = data as any;
+      setResumePosition(row && !row.completed ? Number(row.playback_position_seconds || 0) : 0);
+    };
+    loadSavedProgress();
+  }, [user?.id, id]);
 
   useEffect(() => {
     const loadLikes = async () => {
@@ -243,10 +300,35 @@ export default function SermonDetail() {
       setAccountPromptOpen(true);
       return;
     }
-    await recordDownload(user.id, 'audio', id, sermon.audio_url, 'audio');
+    await recordDownload(user.id, 'audio', id, sermon.audio_url, 'audio', sermon.title);
     await recordContentActivity({ userId: user.id, contentType: 'audio', contentId: id, action: 'download' });
     window.open(sermon.audio_url, '_blank', 'noopener,noreferrer');
   };
+
+  const handleAudioProgress = useCallback((positionSeconds: number, durationSeconds: number) => {
+    if (!user || !id || durationSeconds <= 0) return;
+    const now = Date.now();
+    if (now - lastProgressSaveRef.current < 10000 && positionSeconds < durationSeconds - 2) return;
+    lastProgressSaveRef.current = now;
+    upsertWatchProgress({
+      userId: user.id,
+      contentType: 'audio',
+      contentId: id,
+      playbackPositionSeconds: positionSeconds,
+      durationSeconds,
+    });
+  }, [user?.id, id]);
+
+  const handleAudioEnded = useCallback((durationSeconds: number) => {
+    if (!user || !id || durationSeconds <= 0) return;
+    upsertWatchProgress({
+      userId: user.id,
+      contentType: 'audio',
+      contentId: id,
+      playbackPositionSeconds: durationSeconds,
+      durationSeconds,
+    });
+  }, [user?.id, id]);
 
   const handleShare = async () => {
     if (!sermon) return;
@@ -557,10 +639,10 @@ export default function SermonDetail() {
             </div>
 
             <div className="p-4 sm:p-10">
-              {activeTab === 'video' && sermon.video_url ? (
+              {activeTab === 'video' && videoEmbedUrl ? (
                 <div className="aspect-video bg-stone-100 overflow-hidden rounded-xl border border-stone-200">
                   <iframe
-                    src={sermon.video_url}
+                    src={videoEmbedUrl}
                     className="w-full h-full"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
@@ -619,6 +701,9 @@ export default function SermonDetail() {
 
                   <AudioPlayer
                     src={sermon.audio_url}
+                    initialPositionSeconds={resumePosition}
+                    onProgress={handleAudioProgress}
+                    onEnded={handleAudioEnded}
                     artworkUrl={sermon.thumbnail_url}
                     title={sermon.title}
                     subtitle={sermon.speaker_name}

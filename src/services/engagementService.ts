@@ -86,13 +86,15 @@ export async function upsertWatchProgress(input: {
   if (error) console.warn('Watch progress not saved:', error.message);
 }
 
-export async function recordDownload(userId: string, contentType: ContentType, contentId: string, resourceUrl: string, resourceType = 'file') {
+export async function recordDownload(userId: string, contentType: ContentType, contentId: string, resourceUrl: string, resourceType = 'file', title?: string) {
   const { error } = await supabase.from('content_downloads').insert({
     user_id: userId,
     content_type: contentType,
     content_id: contentId,
     resource_url: resourceUrl,
     resource_type: resourceType,
+    title: title || null,
+    metadata: title ? { title } : {},
   });
   if (error) console.warn('Download not recorded:', error.message);
 }

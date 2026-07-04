@@ -15,6 +15,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
   'follow_up',
   'department_requests',
   'departments',
+  'forms',
 ];
 
 export const DEFAULT_ROLE_PERMISSIONS: RolePermissions = {
@@ -33,6 +34,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissions = {
     follow_up: true,
     department_requests: true,
     departments: true,
+    forms: true,
   },
   editorial: {
     overview: false,
@@ -49,6 +51,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissions = {
     follow_up: false,
     department_requests: false,
     departments: false,
+    forms: true,
   },
   prayer: {
     overview: false,
@@ -65,6 +68,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissions = {
     follow_up: false,
     department_requests: false,
     departments: false,
+    forms: false,
   },
   counselor: {
     overview: false,
@@ -81,6 +85,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissions = {
     follow_up: false,
     department_requests: false,
     departments: false,
+    forms: false,
   },
   follow_up: {
     overview: false,
@@ -97,6 +102,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissions = {
     follow_up: true,
     department_requests: false,
     departments: false,
+    forms: false,
   },
   department_admin: {
     overview: false,
@@ -129,6 +135,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissions = {
     follow_up: false,
     department_requests: false,
     departments: false,
+    forms: false,
   },
 };
 
@@ -196,6 +203,7 @@ export function resolveAdminSection(pathname: string): AdminSection | null {
   if (pathname.startsWith('/admin/follow-up')) return 'follow_up';
   if (pathname.startsWith('/admin/department-requests')) return 'department_requests';
   if (pathname.startsWith('/admin/departments')) return 'departments';
+  if (pathname.startsWith('/admin/forms')) return 'forms';
   if (pathname === '/admin') return 'overview';
   return null;
 }
@@ -207,7 +215,7 @@ export function getFirstAllowedPath(role: AdminRole | string | null | undefined,
   const preferredSections: AdminSection[] = (() => {
     switch (normalizedRole) {
       case 'editorial':
-        return ['posts', 'sermons', 'devotionals', 'notifications', 'overview', 'events', 'testimonials'];
+        return ['posts', 'sermons', 'devotionals', 'forms', 'notifications', 'overview', 'events', 'testimonials'];
       case 'prayer':
         return ['prayer_requests', 'notifications', 'follow_up', 'department_requests', 'overview'];
       case 'counselor':
@@ -244,6 +252,7 @@ export function getFirstAllowedPath(role: AdminRole | string | null | undefined,
       return ROLE_LANDING_PATHS.department_admin;
     case 'sermons':
     case 'devotionals':
+    case 'forms':
       return ROLE_LANDING_PATHS.editorial;
     default:
       return ROLE_LANDING_PATHS.admin;

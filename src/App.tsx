@@ -37,6 +37,8 @@ const Register = lazy(() => import('./pages/Register'));
 const Profile = lazy(() => import('./pages/Profile'));
 const Playlists = lazy(() => import('./pages/Playlists'));
 const PlaylistDetail = lazy(() => import('./pages/PlaylistDetail'));
+const FormPage = lazy(() => import('./pages/FormPage'));
+const AdminForms = lazy(() => import('./pages/Admin/Forms'));
 
 function NewsRedirect() {
   const { slug } = useParams();
@@ -72,6 +74,7 @@ export default function App() {
               <Route path="profile" element={<Profile />} />
               <Route path="playlists" element={<Playlists />} />
               <Route path="playlists/:id" element={<PlaylistDetail />} />
+              <Route path="forms/:slug" element={<FormPage />} />
             </Route>
 
             {/* Admin Routes */}
@@ -84,6 +87,7 @@ export default function App() {
               <Route path="devotionals" element={<AdminDevotionals />} />
               <Route path="events" element={<AdminEvents />} />
               <Route path="testimonials" element={<AdminTestimonials />} />
+              <Route path="forms" element={<AdminForms />} />
               <Route path="users" element={<AdminUsers />} />
               <Route path="notifications" element={<AdminNotifications />} />
               <Route path="prayer-requests" element={<AdminPrayerRequests />} />

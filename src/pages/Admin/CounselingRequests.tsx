@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Loader2, ShieldAlert, Send, Users } from 'lucide-react';
+import { Archive, BarChart3, CheckCircle2, Loader2, RotateCcw, Send, ShieldAlert, Trash2, UserCheck, Users } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
 import { AdminRole } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { dispatchRequestAssignment } from '../../lib/requestDispatch';
-import { isMissingColumnError, stripAssignedPersonId } from '../../lib/requestSchema';
+import { isMissingColumnError, stripAssignedPersonId, stripRequestWorkflowFields } from '../../lib/requestSchema';
 
 type CounselingRequest = {
   id: string;
@@ -41,6 +41,7 @@ export default function AdminCounselingRequests() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState('active');
 
   useEffect(() => {
     fetchAll();
@@ -99,12 +100,32 @@ export default function AdminCounselingRequests() {
         if (!isMissingColumnError(error, 'assigned_person_id')) throw error;
         const fallbackPatch = stripAssignedPersonId(patch as Record<string, unknown>);
         const fallback = await supabase.from('counseling_requests').update(fallbackPatch).eq('id', id);
-        if (fallback.error) throw fallback.error;
+        if (fallback.error) {
+          const legacyPatch = stripRequestWorkflowFields(patch as Record<string, unknown>);
+          if (Object.keys(legacyPatch).length === 0) throw fallback.error;
+          const legacy = await supabase.from('counseling_requests').update(legacyPatch).eq('id', id);
+          if (legacy.error) throw legacy.error;
+        }
       }
       setRequests((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
     } catch (err: any) {
       console.error('Error updating counseling request:', err);
       setError(err?.message || 'Could not update counseling request.');
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function deleteRequest(id: string) {
+    if (!confirm('Delete request?')) return;
+    setSavingId(id);
+    try {
+      const { error } = await supabase.from('counseling_requests').delete().eq('id', id);
+      if (error) throw error;
+      setRequests((current) => current.filter((item) => item.id !== id));
+    } catch (err: any) {
+      console.error('Error deleting counseling request:', err);
+      setError(err?.message || 'Could not delete counseling request.');
     } finally {
       setSavingId(null);
     }
@@ -131,16 +152,32 @@ export default function AdminCounselingRequests() {
 
   const visibleRequests = useMemo(() => {
     if (!user) return requests;
-    if (role === 'admin') {
-      return requests.filter((request) => request.assigned_team === 'admin' || request.assigned_person_id === user.id);
-    }
     const currentName = (profiles.find((profile) => profile.id === user.id)?.full_name || '').trim().toLowerCase();
-    return requests.filter((request) =>
-      request.assigned_person_id === user.id ||
-      request.assigned_person?.trim().toLowerCase() === currentName ||
-      request.assigned_team === 'counseling_team'
-    );
-  }, [requests, role, user?.id, profiles]);
+    const scoped = role === 'admin'
+      ? requests.filter((request) => request.assigned_team === 'admin' || request.assigned_person_id === user.id)
+      : requests.filter((request) =>
+          request.assigned_person_id === user.id ||
+          request.assigned_person?.trim().toLowerCase() === currentName ||
+          request.assigned_team === 'counseling_team'
+        );
+    if (statusFilter === 'all') return scoped;
+    if (statusFilter === 'active') return scoped.filter((request) => request.status !== 'archived' && request.status !== 'done');
+    return scoped.filter((request) => (request.status || 'new') === statusFilter);
+  }, [requests, role, user?.id, profiles, statusFilter]);
+
+  const report = useMemo(() => {
+    const base = !user
+      ? requests
+      : role === 'admin'
+        ? requests.filter((request) => request.assigned_team === 'admin' || request.assigned_person_id === user.id)
+        : requests.filter((request) => request.assigned_team === 'counseling_team' || request.assigned_person_id === user.id);
+    return base.reduce((acc, request) => {
+      const key = request.status || 'new';
+      acc[key] = (acc[key] || 0) + 1;
+      acc.total += 1;
+      return acc;
+    }, { total: 0 } as Record<string, number>);
+  }, [requests, role, user?.id]);
 
   const notifyAssignment = async (request: CounselingRequest, patch: Partial<CounselingRequest>) => {
     const recipientId = patch.assigned_person_id || request.assigned_person_id;
@@ -179,6 +216,21 @@ export default function AdminCounselingRequests() {
         <p className="text-stone-500 text-sm font-light">Private counseling requests are shown here for the counseling team.</p>
       </div>
 
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        {[
+          ['Total', report.total || 0],
+          ['New', report.new || 0],
+          ['Assigned', (report.assigned || 0) + (report.tagged || 0)],
+          ['Done', report.done || 0],
+          ['Archived', report.archived || 0],
+        ].map(([label, value]) => (
+          <div key={label} className="bg-white border border-stone-200 p-4">
+            <p className="text-[10px] uppercase tracking-widest text-stone-400 flex items-center gap-2"><BarChart3 className="w-3 h-3" /> {label}</p>
+            <p className="text-2xl font-bold text-primary mt-1">{value}</p>
+          </div>
+        ))}
+      </div>
+
       {error ? (
         <div className="p-4 border border-amber-200 bg-amber-50 text-amber-800 text-sm flex items-start gap-3">
           <ShieldAlert className="w-5 h-5 shrink-0 mt-0.5" />
@@ -201,6 +253,18 @@ export default function AdminCounselingRequests() {
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
             Refresh
           </button>
+        </div>
+        <div className="px-6 py-4 border-b border-stone-100 flex flex-wrap gap-2">
+          {['active', 'all', 'new', 'tagged', 'assigned', 'done', 'archived'].map((status) => (
+            <button
+              key={status}
+              type="button"
+              onClick={() => setStatusFilter(status)}
+              className={`px-3 py-2 text-[10px] font-bold uppercase tracking-widest border ${statusFilter === status ? 'bg-primary text-white border-primary' : 'bg-white text-stone-600 border-stone-200'}`}
+            >
+              {status}
+            </button>
+          ))}
         </div>
 
         {loading ? (
@@ -250,6 +314,24 @@ export default function AdminCounselingRequests() {
                   </div>
                 </div>
                 {canEdit ? (
+                  <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button type="button" onClick={() => updateRequest(request.id, { status: 'assigned' })} disabled={savingId === request.id} className="inline-flex items-center gap-2 px-3 py-2 border border-stone-200 text-xs font-bold uppercase tracking-widest text-stone-700 disabled:opacity-50">
+                      <UserCheck className="w-4 h-4" /> Mark assigned
+                    </button>
+                    <button type="button" onClick={() => updateRequest(request.id, { status: 'done' })} disabled={savingId === request.id} className="inline-flex items-center gap-2 px-3 py-2 border border-emerald-200 text-xs font-bold uppercase tracking-widest text-emerald-700 disabled:opacity-50">
+                      <CheckCircle2 className="w-4 h-4" /> Done
+                    </button>
+                    <button type="button" onClick={() => updateRequest(request.id, { status: 'archived' })} disabled={savingId === request.id} className="inline-flex items-center gap-2 px-3 py-2 border border-stone-200 text-xs font-bold uppercase tracking-widest text-stone-700 disabled:opacity-50">
+                      <Archive className="w-4 h-4" /> Archive
+                    </button>
+                    <button type="button" onClick={() => updateRequest(request.id, { status: 'new' })} disabled={savingId === request.id} className="inline-flex items-center gap-2 px-3 py-2 border border-stone-200 text-xs font-bold uppercase tracking-widest text-stone-700 disabled:opacity-50">
+                      <RotateCcw className="w-4 h-4" /> Reopen
+                    </button>
+                    <button type="button" onClick={() => deleteRequest(request.id)} disabled={savingId === request.id} className="inline-flex items-center gap-2 px-3 py-2 border border-rose-200 text-xs font-bold uppercase tracking-widest text-rose-700 disabled:opacity-50">
+                      <Trash2 className="w-4 h-4" /> Delete
+                    </button>
+                  </div>
                   <div className="flex flex-wrap items-center gap-3">
                     <select
                       value={request.assigned_team || ''}
@@ -296,6 +378,7 @@ export default function AdminCounselingRequests() {
                       <Send className="w-4 h-4" />
                       Save Assignment
                     </button>
+                  </div>
                   </div>
                 ) : (
                   <p className="text-xs uppercase tracking-widest text-stone-400">Request tagging is available to assigned team admins.</p>

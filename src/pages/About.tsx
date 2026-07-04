@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { Heart, Users, Target, ShieldCheck } from 'lucide-react';
+import { ExternalLink, Heart, Users, Target, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import MarkdownContent from '../components/MarkdownContent';
@@ -54,6 +54,9 @@ export default function About() {
   }, []);
 
   if (loading) return <div className="pt-40 text-center text-stone-500">Loading...</div>;
+  const socialLinks = Array.isArray(settings?.social_links)
+    ? settings.social_links.filter((link: any) => link?.label && link?.url)
+    : [];
 
   return (
     <div className="pt-20">
@@ -79,6 +82,15 @@ export default function About() {
               <Link to={{ pathname: '/', hash: '#departments' }} className="inline-flex text-accent font-bold text-lg underline underline-offset-8">
                 Join us in service
               </Link>
+              {socialLinks.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {socialLinks.map((link: any) => (
+                    <a key={`${link.label}-${link.url}`} href={link.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 border border-white/15 px-4 py-2 text-sm font-bold text-stone-100 hover:border-accent hover:text-accent transition-colors">
+                      {link.label} <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  ))}
+                </div>
+              ) : null}
               <p className="text-stone-300 leading-relaxed">
                 Service is physical. Anyone who wants to serve must present himself or herself to the proper head of department for final screening and admittance.
               </p>

@@ -19,6 +19,9 @@ export default function AudioPlayer(props: {
   bottomActions?: React.ReactNode;
   actions?: React.ReactNode;
   rightActions?: React.ReactNode; // legacy alias
+  initialPositionSeconds?: number;
+  onProgress?: (positionSeconds: number, durationSeconds: number) => void;
+  onEnded?: (durationSeconds: number) => void;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [ready, setReady] = useState(false);
@@ -44,13 +47,23 @@ export default function AudioPlayer(props: {
     const onLoaded = () => {
       setDuration(el.duration || 0);
       setReady(true);
+      if (props.initialPositionSeconds && props.initialPositionSeconds > 3 && Number.isFinite(props.initialPositionSeconds)) {
+        const next = Math.min(props.initialPositionSeconds, Math.max(0, (el.duration || props.initialPositionSeconds) - 2));
+        el.currentTime = next;
+        setCurrent(next);
+      }
     };
     const onTime = () => {
-      if (!seeking) setCurrent(el.currentTime || 0);
+      const next = el.currentTime || 0;
+      if (!seeking) setCurrent(next);
+      props.onProgress?.(next, el.duration || 0);
     };
     const onPlay = () => setPlaying(true);
     const onPause = () => setPlaying(false);
-    const onEnded = () => setPlaying(false);
+    const onEnded = () => {
+      setPlaying(false);
+      props.onEnded?.(el.duration || 0);
+    };
     const onVol = () => {
       setMuted(el.muted);
       setVolume(el.volume);
@@ -71,7 +84,7 @@ export default function AudioPlayer(props: {
       el.removeEventListener('ended', onEnded);
       el.removeEventListener('volumechange', onVol);
     };
-  }, [seeking]);
+  }, [seeking, props.initialPositionSeconds, props.onProgress, props.onEnded]);
 
   useEffect(() => {
     const el = audioRef.current;
@@ -118,6 +131,7 @@ export default function AudioPlayer(props: {
     if (el) el.currentTime = value;
     setCurrent(value);
     setSeeking(false);
+    if (el) props.onProgress?.(value, el.duration || 0);
   };
 
   const topActions = props.topActions;
