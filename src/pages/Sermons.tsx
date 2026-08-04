@@ -1,11 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Sermon } from '../types';
-import { Play, Calendar, User, Search, Music, FileText, Video, Tag, Filter } from 'lucide-react';
+import { Play, Calendar, User, Search, Music, FileText, Video, Tag, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion } from 'motion/react';
 import { format } from 'date-fns';
 import { Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import Seo from '../components/Seo';
+import { useAuth } from '../contexts/AuthContext';
+import { SiteSettings } from '../types';
+
+const PAGE_SIZE = 6;
 
 export default function Sermons() {
   const [sermons, setSermons] = useState<Sermon[]>([]);
@@ -13,7 +17,11 @@ export default function Sermons() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [page, setPage] = useState(1);
+  const [lastWatchedId, setLastWatchedId] = useState<string | null>(null);
+  const [settings, setSettings] = useState<SiteSettings | null>(null);
   const [searchParams] = useSearchParams();
+  const { user } = useAuth();
   const isVisibleSermon = (sermon: Sermon) => {
     if (sermon.status === 'draft') return false;
     const publishedDate = sermon.published_at || sermon.sermon_date;
@@ -69,12 +77,38 @@ export default function Sermons() {
 
     fetchSermons();
     fetchCategories();
+    supabase.from('site_settings').select('page_header_images').single().then(({ data }) => {
+      if (data) setSettings(data as SiteSettings);
+    });
   }, []);
+
+  useEffect(() => {
+    async function fetchLastWatched() {
+      if (!user) {
+        setLastWatchedId(null);
+        return;
+      }
+      const { data } = await supabase
+        .from('watch_progress')
+        .select('content_id')
+        .eq('user_id', user.id)
+        .in('content_type', ['sermon', 'audio'])
+        .order('last_viewed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      setLastWatchedId((data as any)?.content_id || null);
+    }
+    fetchLastWatched();
+  }, [user?.id, user]);
 
   const visibleSermons = useMemo(
     () => sermons.filter((sermon) => isVisibleSermon(sermon)),
     [sermons],
   );
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, selectedCategory, searchParams]);
 
   const filteredSermons = visibleSermons.filter(s => {
     const matchesSearch = s.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -89,6 +123,17 @@ export default function Sermons() {
     const matchesDate = !urlDate || sermonDate === urlDate;
     return matchesSearch && matchesCategory && matchesSpeaker && matchesUrlCategory && matchesDate;
   });
+
+  const prioritizedSermons = useMemo(() => {
+    if (!lastWatchedId) return filteredSermons;
+    const last = filteredSermons.find((sermon) => sermon.id === lastWatchedId);
+    if (!last) return filteredSermons;
+    return [last, ...filteredSermons.filter((sermon) => sermon.id !== lastWatchedId)];
+  }, [filteredSermons, lastWatchedId]);
+
+  const pageCount = Math.max(1, Math.ceil(prioritizedSermons.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pagedSermons = prioritizedSermons.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const activeFilters = [
     searchParams.get('speaker') ? { label: `Speaker: ${searchParams.get('speaker')}`, to: '/sermons' } : null,
@@ -105,7 +150,10 @@ export default function Sermons() {
         path="/sermons"
       />
       {/* Header */}
-      <section className="bg-primary py-24 sm:py-32 text-white text-center relative overflow-hidden">
+      <section
+        className="bg-primary py-24 sm:py-32 text-white text-center relative overflow-hidden"
+        style={(settings as any)?.page_header_images?.sermons ? { backgroundImage: `linear-gradient(rgba(5, 45, 79, 0.76), rgba(5, 45, 79, 0.76)), url(${(settings as any).page_header_images.sermons})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+      >
         <div className="w-full px-4 sm:px-8 md:px-16 relative z-10">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -125,8 +173,12 @@ export default function Sermons() {
       </section>
 
       {/* Search & Filter Bar - Spread Wide */}
-      <div className="w-full px-4 sm:px-8 md:px-16 py-8 sm:py-16 bg-white border-b border-stone-100">
+      <div id="content" className="w-full px-4 sm:px-8 md:px-16 py-8 sm:py-16 bg-white border-b border-stone-100">
         <div className="max-w-7xl mx-auto flex flex-col lg:flex-row gap-6 sm:gap-8 items-center">
+          <div className="flex w-full lg:w-auto rounded-full border border-stone-200 bg-stone-50 p-1">
+            <a href="#content" className="rounded-full bg-primary px-5 py-3 text-xs font-bold uppercase tracking-widest text-white">Content</a>
+            <Link to="/playlists" className="rounded-full px-5 py-3 text-xs font-bold uppercase tracking-widest text-stone-500 hover:text-primary">Playlists</Link>
+          </div>
           <div className="relative flex-grow group w-full">
             <Search className="absolute left-6 sm:left-8 top-1/2 -translate-y-1/2 text-stone-400 w-5 h-5 sm:w-6 h-6 group-focus-within:text-accent transition-colors" />
             <input
@@ -179,14 +231,14 @@ export default function Sermons() {
           </div>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8 sm:gap-12">
-            {filteredSermons.map((sermon) => (
+            {pagedSermons.map((sermon) => (
               <Link
                 key={sermon.id}
-                to={`/sermons/${sermon.id}`}
+                to={`/sermons/${sermon.id}#audio`}
               >
                 <motion.div
                   whileHover={{ y: -10 }}
-                  className="bg-white overflow-hidden border border-stone-100 group cursor-pointer transition-all duration-700 h-full flex flex-col"
+                  className="bg-white overflow-hidden border border-stone-100 group cursor-pointer transition-all duration-700 h-full min-h-[430px] flex flex-col"
                 >
                   <div className="relative aspect-video overflow-hidden">
                     <img
@@ -219,7 +271,7 @@ export default function Sermons() {
                       )}
                     </div>
                   </div>
-                  <div className="p-6 sm:p-12 space-y-4 sm:space-y-6 flex-grow">
+                  <div className="p-6 sm:p-10 space-y-4 flex-grow flex flex-col">
                     <div className="flex flex-wrap items-center gap-4 sm:gap-8 text-[10px] sm:text-xs font-bold text-accent uppercase tracking-[0.2em]">
                       <div className="flex items-center gap-2 sm:gap-3">
                         <Calendar className="w-3 h-3 sm:w-4 h-4" />
@@ -232,15 +284,17 @@ export default function Sermons() {
                     </div>
                     <h3 className="text-xl sm:text-3xl md:text-4xl font-serif font-bold text-primary group-hover:text-accent transition-colors line-clamp-2 leading-tight">{sermon.title}</h3>
                     <div className="flex items-center gap-2">
+                      {sermon.id === lastWatchedId ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary text-white text-[10px] font-bold uppercase tracking-widest">
+                          Last watched
+                        </span>
+                      ) : null}
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-accent/10 text-accent text-[10px] font-bold uppercase tracking-widest">
                         <Tag className="w-3 h-3" />
                         {sermon.category || 'Uncategorized'}
                       </span>
                     </div>
                     <div className="w-12 h-[1px] bg-stone-200 group-hover:w-full transition-all duration-700" />
-                    <p className="text-base sm:text-xl text-stone-500 font-light leading-relaxed line-clamp-3">
-                      {sermon.description}
-                    </p>
                   </div>
                 </motion.div>
               </Link>
@@ -253,6 +307,29 @@ export default function Sermons() {
             No sermons found matching your search.
           </div>
         )}
+        {!loading && prioritizedSermons.length > PAGE_SIZE ? (
+          <div className="mt-12 flex items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => setPage((value) => Math.max(1, value - 1))}
+              disabled={currentPage === 1}
+              className="inline-flex items-center gap-2 border border-stone-200 bg-white px-4 py-3 text-xs font-bold uppercase tracking-widest text-primary disabled:opacity-40"
+            >
+              <ChevronLeft className="w-4 h-4" /> Prev
+            </button>
+            <span className="text-xs font-bold uppercase tracking-widest text-stone-500">
+              Page {currentPage} / {pageCount}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPage((value) => Math.min(pageCount, value + 1))}
+              disabled={currentPage === pageCount}
+              className="inline-flex items-center gap-2 border border-stone-200 bg-white px-4 py-3 text-xs font-bold uppercase tracking-widest text-primary disabled:opacity-40"
+            >
+              Next <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        ) : null}
       </section>
     </div>
   );

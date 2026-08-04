@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, Loader2, ArrowRight, Church, User, CheckCircle2, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, Loader2, ArrowRight, Church, User, CheckCircle2, Eye, EyeOff, Calendar } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -10,6 +10,8 @@ export default function Register() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [birthMonth, setBirthMonth] = useState('');
+  const [birthDay, setBirthDay] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<SiteSettings | null>(null);
@@ -32,8 +34,19 @@ export default function Register() {
     setError(null);
 
     try {
-      const { error: signUpError } = await signUp(email, password, fullName);
+      const { error: signUpError, data } = await signUp(email, password, fullName, birthMonth, birthDay);
       if (signUpError) throw signUpError;
+
+      if (data?.user && birthMonth && birthDay) {
+        await supabase
+          .from('profiles')
+          .update({
+            birth_month: Number(birthMonth),
+            birth_day: Number(birthDay),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', data.user.id);
+      }
       
       // Redirect to home or show success message
       navigate('/');
@@ -156,6 +169,40 @@ export default function Register() {
                     className="w-full pl-12 pr-4 py-4 bg-white border border-stone-200 rounded-xl focus:ring-4 focus:ring-accent/10 focus:border-accent outline-none transition-all"
                     placeholder="you@example.com"
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-stone-700 uppercase tracking-widest">Birth Month</label>
+                  <div className="relative">
+                    <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400" />
+                    <select
+                      required
+                      value={birthMonth}
+                      onChange={(e) => setBirthMonth(e.target.value)}
+                      className="w-full pl-12 pr-4 py-4 bg-white border border-stone-200 rounded-xl focus:ring-4 focus:ring-accent/10 focus:border-accent outline-none transition-all appearance-none"
+                    >
+                      <option value="">Month</option>
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
+                        <option key={month} value={month}>{month}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-stone-700 uppercase tracking-widest">Birth Day</label>
+                  <select
+                    required
+                    value={birthDay}
+                    onChange={(e) => setBirthDay(e.target.value)}
+                    className="w-full px-4 py-4 bg-white border border-stone-200 rounded-xl focus:ring-4 focus:ring-accent/10 focus:border-accent outline-none transition-all appearance-none"
+                  >
+                    <option value="">Day</option>
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                      <option key={day} value={day}>{day}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

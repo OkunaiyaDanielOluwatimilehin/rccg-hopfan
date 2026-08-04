@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Bell, ChevronDown, Clock3, LogIn, LogOut, Menu, User, X } from 'lucide-react';
+import { Bell, Clock3, LogIn, LogOut, Menu, User, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -9,7 +9,6 @@ import { getFirstAllowedPath, normalizeAdminRole } from '../lib/adminAccess';
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = React.useState(false);
-  const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const { user, signOut } = useAuth();
   const location = useLocation();
@@ -23,6 +22,8 @@ export default function Navbar() {
     created_at: string;
     read_at: string | null;
     request_type: string | null;
+    href?: string;
+    priority?: number;
   }>>([]);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
 
@@ -35,26 +36,16 @@ export default function Navbar() {
       : location.pathname === path.pathname && location.hash === path.hash;
 
   type NavPath = string | { pathname: string; hash?: string };
-  type NavGroup =
-    | { name: string; path: NavPath; accent?: boolean }
-    | { name: string; items: Array<{ name: string; path: NavPath }>; accent?: boolean };
+  type NavGroup = { name: string; path: NavPath; accent?: boolean };
 
   const navGroups: NavGroup[] = [
     { name: 'Home', path: '/' },
     { name: 'Sermons', path: '/sermons' },
-    {
-      name: 'More',
-      items: [
-        { name: 'Articles', path: '/editorial' },
-        { name: 'Devotionals', path: '/devotionals' },
-        { name: 'Events', path: '/events' },
-        { name: 'Full Gallery', path: '/gallery' },
-        { name: 'Serve', path: '/serve' },
-        { name: 'Prayer Request', path: { pathname: '/', hash: '#prayer-request' } },
-        { name: 'Counseling', path: { pathname: '/', hash: '#counseling' } },
-        { name: 'Giving', path: { pathname: '/', hash: '#giving' } },
-      ],
-    },
+    { name: 'Articles', path: '/editorial' },
+    { name: 'Devotionals', path: '/devotionals' },
+    { name: 'Events', path: '/events' },
+    { name: 'Gallery', path: '/gallery' },
+    { name: 'About', path: '/about' },
   ];
 
   const initials = useMemo(() => {
@@ -92,21 +83,46 @@ export default function Navbar() {
 
   useEffect(() => {
     const loadNotifications = async () => {
-      if (!user) {
-        setNotifications([]);
-        return;
-      }
-
       setNotificationsLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('request_notifications')
-          .select('id,title,body,created_at,read_at,request_type')
-          .eq('recipient_profile_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(5);
-        if (error) throw error;
-        setNotifications((data || []) as any[]);
+        const nowIso = new Date().toISOString();
+        const [requestRes, eventsRes, sermonsRes, devotionalsRes, postsRes] = await Promise.all([
+          user
+            ? supabase
+                .from('request_notifications')
+                .select('id,title,body,created_at,read_at,request_type')
+                .eq('recipient_profile_id', user.id)
+                .order('created_at', { ascending: false })
+                .limit(5)
+            : Promise.resolve({ data: [], error: null } as any),
+          supabase.from('events').select('id,title,description,event_date,published_at,created_at').lte('published_at', nowIso).order('event_date', { ascending: false }).limit(3),
+          supabase.from('sermons').select('id,title,description,sermon_date,published_at,created_at').neq('status', 'draft').order('published_at', { ascending: false }).limit(3),
+          supabase.from('devotionals').select('id,title,content,published_at,created_at').eq('status', 'published').lte('published_at', nowIso).order('published_at', { ascending: false }).limit(3),
+          supabase.from('posts').select('id,title,summary,slug,published_at,created_at').eq('status', 'published').lte('published_at', nowIso).order('published_at', { ascending: false }).limit(3),
+        ]);
+        if (requestRes.error) throw requestRes.error;
+
+        const seenRaw = localStorage.getItem('hopfan_seen_content_notifications');
+        const seen = new Set<string>(seenRaw ? JSON.parse(seenRaw) : []);
+        const contentItems = [
+          ...((eventsRes.data || []) as any[]).map((item) => ({ id: `event-${item.id}`, title: item.title, body: item.description || 'New event update', created_at: item.published_at || item.created_at || item.event_date, read_at: seen.has(`event-${item.id}`) ? item.created_at : null, request_type: 'content', href: `/events/${item.id}`, priority: 4 })),
+          ...((sermonsRes.data || []) as any[]).map((item) => ({ id: `sermon-${item.id}`, title: item.title, body: item.description || 'New sermon uploaded', created_at: item.published_at || item.created_at || item.sermon_date, read_at: seen.has(`sermon-${item.id}`) ? item.created_at : null, request_type: 'content', href: `/sermons/${item.id}`, priority: 3 })),
+          ...((devotionalsRes.data || []) as any[]).map((item) => ({ id: `devotional-${item.id}`, title: item.title, body: item.content || 'New devotional available', created_at: item.published_at || item.created_at, read_at: seen.has(`devotional-${item.id}`) ? item.created_at : null, request_type: 'content', href: '/devotionals', priority: 2 })),
+          ...((postsRes.data || []) as any[]).map((item) => ({ id: `article-${item.id}`, title: item.title, body: item.summary || 'New article published', created_at: item.published_at || item.created_at, read_at: seen.has(`article-${item.id}`) ? item.created_at : null, request_type: 'content', href: `/editorial/${item.slug}`, priority: 1 })),
+        ];
+        const merged = [...((requestRes.data || []) as any[]), ...contentItems]
+          .sort((a, b) => (Number(b.priority || 0) - Number(a.priority || 0)) || new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .slice(0, 8);
+        setNotifications(merged);
+
+        const newest = merged.find((item) => !item.read_at && item.request_type === 'content');
+        if (newest && 'Notification' in window && Notification.permission === 'granted') {
+          new Notification(newest.title, { body: newest.body });
+        } else if (newest && 'Notification' in window && Notification.permission === 'default') {
+          Notification.requestPermission().then((permission) => {
+            if (permission === 'granted') new Notification(newest.title, { body: newest.body });
+          });
+        }
       } catch (error) {
         console.error('Error loading notifications:', error);
         setNotifications([]);
@@ -130,6 +146,16 @@ export default function Navbar() {
 
   const handleNotificationClick = async (notification: (typeof notifications)[number]) => {
     try {
+      if (notification.href) {
+        const seenRaw = localStorage.getItem('hopfan_seen_content_notifications');
+        const seen = new Set<string>(seenRaw ? JSON.parse(seenRaw) : []);
+        seen.add(notification.id);
+        localStorage.setItem('hopfan_seen_content_notifications', JSON.stringify(Array.from(seen).slice(-80)));
+        setNotifications((current) => current.map((item) => (item.id === notification.id ? { ...item, read_at: item.read_at || new Date().toISOString() } : item)));
+        setNotificationsOpen(false);
+        navigate(notification.href);
+        return;
+      }
       if (!notification.read_at) {
         const { error } = await supabase
           .from('request_notifications')
@@ -148,73 +174,43 @@ export default function Navbar() {
 
   return (
     <nav className="bg-white border-b border-stone-200 sticky top-0 z-50">
-      <div className="w-full px-8 md:px-16">
-        <div className="flex justify-between h-16">
-          <div className="flex items-center">
-            <Link to="/" className="flex items-center gap-3">
+      <div className="w-full px-4 sm:px-8 md:px-10 xl:px-16">
+        <div className="flex justify-between h-16 gap-4">
+          <div className="flex min-w-0 items-center">
+            <Link to="/" className="flex items-center gap-3 min-w-0">
               <img
                 src="/Rccg_logo.png"
                 alt="RCCG Logo"
                 className="w-9 h-9 object-contain"
                 referrerPolicy="no-referrer"
               />
-              <span className="font-serif text-xl font-bold tracking-tight text-primary">RCCG HOPFAN</span>
             </Link>
           </div>
 
           {/* Desktop Links */}
-          <div className="hidden md:flex items-center gap-6 lg:gap-8">
-            {navGroups.map((group) => {
-              if ('path' in group) {
-                const isActive = isSamePath(group.path);
-                return (
-                  <Link
-                    key={getPathKey(group.path)}
-                    to={group.path}
-                    className={`text-sm font-bold uppercase tracking-wider transition-colors hover:text-accent ${
-                      group.accent
-                        ? isActive
-                          ? 'text-rose-600 border-b-2 border-rose-500'
-                          : 'text-rose-600'
-                        : isActive
-                          ? 'text-primary border-b-2 border-accent'
-                          : 'text-stone-600'
-                    }`}
-                  >
-                    {group.name}
-                  </Link>
-                );
-              }
-
+          <div className="hidden md:flex min-w-0 items-center gap-3 lg:gap-4 xl:gap-5">
+            {navGroups.map((item) => {
+              const isActive = isSamePath(item.path);
               return (
-                <div key={group.name} className="relative group">
-                  <button
-                    type="button"
-                    className="text-sm font-bold uppercase tracking-wider text-stone-600 hover:text-accent transition-colors inline-flex items-center gap-1"
-                  >
-                    {group.name}
-                    <ChevronDown className="w-4 h-4" />
-                  </button>
-                  <div className="absolute left-0 top-full pt-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
-                    <div className="bg-white border border-stone-200 shadow-2xl min-w-56 p-2 rounded-none">
-                      {group.items.map((item) => (
-                        <Link
-                          key={getPathKey(item.path)}
-                          to={item.path}
-                          className={`block px-4 py-3 text-sm font-bold uppercase tracking-widest transition-colors hover:bg-stone-50 hover:text-primary ${
-                            isSamePath(item.path) ? 'text-primary' : 'text-stone-600'
-                          }`}
-                        >
-                          {item.name}
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+                <Link
+                  key={getPathKey(item.path)}
+                  to={item.path}
+                  className={`text-sm font-bold uppercase tracking-wider transition-colors hover:text-accent ${
+                    item.accent
+                      ? isActive
+                        ? 'text-rose-600 border-b-2 border-rose-500'
+                        : 'text-rose-600'
+                      : isActive
+                        ? 'text-primary border-b-2 border-accent'
+                        : 'text-stone-600'
+                  }`}
+                >
+                  {item.name}
+                </Link>
               );
             })}
-            
-            <div className="h-6 w-px bg-stone-200 mx-2" />
+
+            <div className="h-6 w-px bg-stone-200 mx-1" />
             
             {user ? (
               <div className="flex items-center gap-4">
@@ -352,54 +348,22 @@ export default function Navbar() {
           >
           <div className="px-4 pt-2 pb-6 space-y-1">
               {navGroups.map((group) => {
-              if ('path' in group) {
-                  const active = isSamePath(group.path);
-                  return (
-                    <Link
-                      key={getPathKey(group.path)}
-                      to={group.path}
-                      onClick={() => setIsOpen(false)}
-                      className={`block px-3 py-3 text-base font-bold uppercase tracking-widest transition-all hover:bg-stone-50 ${
-                        group.accent
-                          ? active
-                            ? 'text-rose-600 hover:text-rose-700'
-                            : 'text-rose-600 hover:text-rose-700'
-                          : active
-                            ? 'text-primary hover:text-primary'
-                            : 'text-stone-600 hover:text-accent'
-                      }`}
-                    >
-                      {group.name}
-                    </Link>
-                  );
-                }
-
-                const expanded = openGroup === group.name;
+                const active = isSamePath(group.path);
                 return (
-                  <div key={group.name} className="border border-stone-100">
-                    <button
-                      type="button"
-                      onClick={() => setOpenGroup((curr) => (curr === group.name ? null : group.name))}
-                      className="w-full flex items-center justify-between px-3 py-3 text-base font-bold text-stone-600 hover:text-accent hover:bg-stone-50 uppercase tracking-widest transition-all"
-                    >
-                      <span>{group.name}</span>
-                      <ChevronDown className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} />
-                    </button>
-                    {expanded && (
-                      <div className="bg-stone-50">
-                        {group.items.map((item) => (
-                          <Link
-                            key={getPathKey(item.path)}
-                            to={item.path}
-                            onClick={() => setIsOpen(false)}
-                            className="block px-5 py-3 text-sm font-bold text-stone-600 hover:text-primary hover:bg-white uppercase tracking-widest transition-all border-t border-stone-100"
-                          >
-                            {item.name}
-                          </Link>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  <Link
+                    key={getPathKey(group.path)}
+                    to={group.path}
+                    onClick={() => setIsOpen(false)}
+                    className={`block px-3 py-3 text-base font-bold uppercase tracking-widest transition-all hover:bg-stone-50 ${
+                      group.accent
+                        ? 'text-rose-600 hover:text-rose-700'
+                        : active
+                          ? 'text-primary hover:text-primary'
+                          : 'text-stone-600 hover:text-accent'
+                    }`}
+                  >
+                    {group.name}
+                  </Link>
                 );
               })}
               

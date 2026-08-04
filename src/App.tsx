@@ -8,8 +8,6 @@ import SiteSettingsApplier from './components/SiteSettingsApplier';
 const Home = lazy(() => import('./pages/Home'));
 const About = lazy(() => import('./pages/About'));
 const Gallery = lazy(() => import('./pages/Gallery'));
-const Serve = lazy(() => import('./pages/Serve'));
-const Contact = lazy(() => import('./pages/Contact'));
 const Sermons = lazy(() => import('./pages/Sermons'));
 const SermonDetail = lazy(() => import('./pages/SermonDetail'));
 const AdminLogin = lazy(() => import('./pages/Admin/Login'));
@@ -34,11 +32,15 @@ const Events = lazy(() => import('./pages/Events'));
 const EventDetail = lazy(() => import('./pages/EventDetail'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const Profile = lazy(() => import('./pages/Profile'));
 const Playlists = lazy(() => import('./pages/Playlists'));
 const PlaylistDetail = lazy(() => import('./pages/PlaylistDetail'));
 const FormPage = lazy(() => import('./pages/FormPage'));
 const AdminForms = lazy(() => import('./pages/Admin/Forms'));
+const Newcomers = lazy(() => import('./pages/Newcomers'));
+const AdminNewcomers = lazy(() => import('./pages/Admin/Newcomers'));
 
 function NewsRedirect() {
   const { slug } = useParams();
@@ -58,8 +60,8 @@ export default function App() {
               <Route index element={<Home />} />
               <Route path="about" element={<About />} />
               <Route path="gallery" element={<Gallery />} />
-              <Route path="serve" element={<Serve />} />
-              <Route path="contact" element={<Contact />} />
+              <Route path="serve" element={<Navigate to="/about" replace />} />
+              <Route path="contact" element={<Navigate to="/about#get-in-touch" replace />} />
               <Route path="sermons" element={<Sermons />} />
               <Route path="sermons/:id" element={<SermonDetail />} />
               <Route path="editorial" element={<Editorial />} />
@@ -71,11 +73,14 @@ export default function App() {
               <Route path="events/:id" element={<EventDetail />} />
               <Route path="login" element={<Login />} />
               <Route path="register" element={<Register />} />
+              <Route path="forgot-password" element={<ForgotPassword />} />
+              <Route path="reset-password" element={<ResetPassword />} />
               <Route path="profile" element={<Profile />} />
               <Route path="playlists" element={<Playlists />} />
               <Route path="playlists/:id" element={<PlaylistDetail />} />
               <Route path="forms/:slug" element={<FormPage />} />
             </Route>
+            <Route path="/newcomers" element={<Newcomers />} />
 
             {/* Admin Routes */}
             <Route path="/admin/login" element={<AdminLogin />} />
@@ -88,6 +93,7 @@ export default function App() {
               <Route path="events" element={<AdminEvents />} />
               <Route path="testimonials" element={<AdminTestimonials />} />
               <Route path="forms" element={<AdminForms />} />
+              <Route path="newcomers" element={<AdminNewcomers />} />
               <Route path="users" element={<AdminUsers />} />
               <Route path="notifications" element={<AdminNotifications />} />
               <Route path="prayer-requests" element={<AdminPrayerRequests />} />

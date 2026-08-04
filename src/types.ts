@@ -15,7 +15,8 @@ export type AdminSection =
   | 'follow_up'
   | 'department_requests'
   | 'departments'
-  | 'forms';
+  | 'forms'
+  | 'newcomers';
 
 export type RolePermissions = Record<AdminRole, Partial<Record<AdminSection, boolean>>>;
 
@@ -24,6 +25,8 @@ export interface Profile {
   full_name: string;
   role: AdminRole;
   avatar_url?: string;
+  birth_month?: number | null;
+  birth_day?: number | null;
 }
 
 export interface Post {
@@ -95,8 +98,11 @@ export interface SiteSettings {
   core_values: string[];
   contact_email: string;
   contact_phone: string;
+  whatsapp_phone?: string;
   address: string;
+  google_maps_url?: string;
   social_links?: SocialLink[];
+  page_header_images?: Record<string, string>;
   giving_bank_name?: string;
   giving_account_name?: string;
   giving_account_number?: string;
@@ -224,6 +230,43 @@ export interface CustomFormEntry {
   values: Record<string, unknown>;
   submitted_by?: string | null;
   created_at: string;
+}
+
+export interface NewcomerFormField {
+  id: string;
+  label: string;
+  field_key: string;
+  field_type: CustomFormFieldType;
+  required?: boolean;
+  options?: string[];
+  order_index?: number;
+  active?: boolean;
+}
+
+export interface Newcomer {
+  id: string;
+  submitted_at?: string;
+  visit_date?: string;
+  first_name: string;
+  middle_name?: string;
+  last_name: string;
+  marital_status?: string;
+  gender?: string;
+  occupation?: string;
+  birth_month?: number | null;
+  birth_day?: number | null;
+  home_address?: string;
+  time_available_for_visit?: string;
+  phone_number?: string;
+  whatsapp_number?: string;
+  email?: string;
+  prayer_request?: string;
+  consent_events_checkups?: boolean;
+  consent_newsletter_calls?: boolean;
+  extra_fields?: Record<string, unknown>;
+  status?: string;
+  notes?: string;
+  created_at?: string;
 }
 
 export interface ServiceTime {

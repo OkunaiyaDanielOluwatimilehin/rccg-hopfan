@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { BookOpen, Edit2, Loader2, Plus, Save, Search, Trash2 } from 'lucide-react';
+import { BookOpen, ChevronLeft, ChevronRight, Edit2, Loader2, Plus, Save, Search, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
 import { Devotional } from '../../types';
 import MiniTextEditor from '../../components/MiniTextEditor';
+
+const PAGE_SIZE = 6;
 
 const initialFormData = {
   title: '',
@@ -26,6 +28,7 @@ export default function AdminDevotionals() {
   const [visibilityMode, setVisibilityMode] = useState<'published' | 'scheduled' | 'draft'>('published');
   const [actionLoading, setActionLoading] = useState<'draft' | 'published' | 'scheduled' | null>(null);
   const [formData, setFormData] = useState(initialFormData);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     fetchDevotionals();
@@ -134,6 +137,13 @@ export default function AdminDevotionals() {
     dev.title.toLowerCase().includes(search.toLowerCase()) ||
     (dev.author || '').toLowerCase().includes(search.toLowerCase()),
   );
+  const pageCount = Math.max(1, Math.ceil(filteredDevotionals.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pagedDevotionals = filteredDevotionals.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
 
   if (isModalOpen) {
     return (
@@ -349,7 +359,7 @@ export default function AdminDevotionals() {
                     <td className="px-8 py-6 text-right"><div className="h-4 bg-stone-100 rounded w-12 ml-auto" /></td>
                   </tr>
                 ))
-              ) : filteredDevotionals.map((dev) => (
+              ) : pagedDevotionals.map((dev) => (
                 <tr key={dev.id} className="hover:bg-stone-50/50 transition-colors group">
                   <td className="px-8 py-6 font-bold text-primary text-base tracking-tight">{dev.title}</td>
                   <td className="px-8 py-6 text-stone-500 font-medium">
@@ -398,6 +408,17 @@ export default function AdminDevotionals() {
             </div>
           )}
         </div>
+        {!loading && filteredDevotionals.length > PAGE_SIZE ? (
+          <div className="flex items-center justify-center gap-3 border-t border-stone-100 p-5">
+            <button type="button" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={currentPage === 1} className="inline-flex items-center gap-2 border border-stone-200 bg-white px-4 py-3 text-xs font-bold uppercase tracking-widest text-primary disabled:opacity-40">
+              <ChevronLeft className="w-4 h-4" /> Prev
+            </button>
+            <span className="text-xs font-bold uppercase tracking-widest text-stone-500">Page {currentPage} / {pageCount}</span>
+            <button type="button" onClick={() => setPage((value) => Math.min(pageCount, value + 1))} disabled={currentPage === pageCount} className="inline-flex items-center gap-2 border border-stone-200 bg-white px-4 py-3 text-xs font-bold uppercase tracking-widest text-primary disabled:opacity-40">
+              Next <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   );

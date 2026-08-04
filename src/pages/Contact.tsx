@@ -1,12 +1,39 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { Mail, Phone, MapPin, Send, Clock } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { SiteSettings } from '../types';
+import SocialIcon from '../components/SocialIcon';
 
 export default function Contact() {
+  const [settings, setSettings] = useState<SiteSettings | null>(null);
+  const [contact, setContact] = useState<any>(null);
+
+  useEffect(() => {
+    async function loadContact() {
+      const [settingsRes, contactsRes] = await Promise.all([
+        supabase.from('site_settings').select('*').single(),
+        supabase.from('contacts').select('*').limit(1).maybeSingle(),
+      ]);
+      if (settingsRes.data) setSettings(settingsRes.data as SiteSettings);
+      if (!contactsRes.error && contactsRes.data) setContact(contactsRes.data);
+    }
+    loadContact();
+  }, []);
+
+  const address = contact?.address || settings?.address || '123 Faith Lane, Grace City, GC 12345';
+  const phone = contact?.phone || settings?.contact_phone || '(555) 123-4567';
+  const email = contact?.email || settings?.contact_email || 'contact@rccghopfan.org';
+  const serviceTimes = Array.isArray(settings?.service_times) ? settings.service_times : [];
+  const socialLinks = Array.isArray((settings as any)?.social_links) ? (settings as any).social_links.filter((link: any) => link?.label && link?.url) : [];
+
   return (
     <div className="pt-20 bg-cream min-h-screen">
       {/* Hero */}
-      <section className="bg-primary py-32 text-white relative overflow-hidden">
+      <section
+        className="bg-primary py-32 text-white relative overflow-hidden"
+        style={settings?.page_header_images?.contact ? { backgroundImage: `linear-gradient(rgba(5, 45, 79, 0.76), rgba(5, 45, 79, 0.76)), url(${settings.page_header_images.contact})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+      >
         <div className="w-full px-8 md:px-16 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -42,7 +69,7 @@ export default function Contact() {
                   </div>
                   <div>
                     <h3 className="text-xl font-bold text-primary mb-2 uppercase tracking-widest text-xs opacity-50">Our Location</h3>
-                    <p className="text-2xl text-stone-600 font-light">123 Faith Lane, Grace City, GC 12345</p>
+                    <p className="text-2xl text-stone-600 font-light">{address}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-8">
@@ -51,7 +78,7 @@ export default function Contact() {
                   </div>
                   <div>
                     <h3 className="text-xl font-bold text-primary mb-2 uppercase tracking-widest text-xs opacity-50">Phone Number</h3>
-                    <p className="text-2xl text-stone-600 font-light">(555) 123-4567</p>
+                    <p className="text-2xl text-stone-600 font-light">{phone}</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-8">
@@ -60,9 +87,18 @@ export default function Contact() {
                   </div>
                   <div>
                     <h3 className="text-xl font-bold text-primary mb-2 uppercase tracking-widest text-xs opacity-50">Email Address</h3>
-                    <p className="text-2xl text-stone-600 font-light">contact@rccghopfan.org</p>
+                    <p className="text-2xl text-stone-600 font-light">{email}</p>
                   </div>
                 </div>
+                {socialLinks.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {socialLinks.map((link: any) => (
+                      <a key={`${link.label}-${link.url}`} href={link.url} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 w-11 items-center justify-center border border-stone-200 text-primary hover:border-accent hover:text-accent transition-colors" aria-label={link.label}>
+                        <SocialIcon label={link.label} url={link.url} />
+                      </a>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -72,18 +108,16 @@ export default function Contact() {
                 Service Times
               </h2>
               <div className="space-y-8">
-                <div className="flex justify-between items-center border-b border-white/10 pb-6">
-                  <span className="text-xl text-stone-300 font-light">Sunday Worship</span>
-                  <span className="text-2xl text-accent font-bold">10:00 AM</span>
-                </div>
-                <div className="flex justify-between items-center border-b border-white/10 pb-6">
-                  <span className="text-xl text-stone-300 font-light">Tuesday Bible Study</span>
-                  <span className="text-2xl text-accent font-bold">6:00 PM</span>
-                </div>
-                <div className="flex justify-between items-center pb-6">
-                  <span className="text-xl text-stone-300 font-light">Friday Prayer</span>
-                  <span className="text-2xl text-accent font-bold">7:00 PM</span>
-                </div>
+                {(serviceTimes.length ? serviceTimes : [
+                  { day: 'Sunday', activity: 'Worship', time: '10:00 AM' },
+                  { day: 'Tuesday', activity: 'Bible Study', time: '6:00 PM' },
+                  { day: 'Friday', activity: 'Prayer', time: '7:00 PM' },
+                ]).map((item: any, index: number) => (
+                  <div key={`${item.day}-${item.time}-${index}`} className="flex justify-between items-center border-b border-white/10 pb-6 gap-6">
+                    <span className="text-xl text-stone-300 font-light">{item.day} {item.activity}</span>
+                    <span className="text-2xl text-accent font-bold text-right">{item.time}</span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>

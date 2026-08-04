@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { ExternalLink, Heart, Users, Target, ShieldCheck } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Heart, Users, Target, ShieldCheck, MapPin, Phone, Mail, MessageCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import MarkdownContent from '../components/MarkdownContent';
+import SocialIcon from '../components/SocialIcon';
 
 const ICON_MAP: Record<string, any> = {
   Heart,
@@ -57,11 +57,20 @@ export default function About() {
   const socialLinks = Array.isArray(settings?.social_links)
     ? settings.social_links.filter((link: any) => link?.label && link?.url)
     : [];
+  const address = settings?.address || '31, Adetayo-osho street, by Folagoro round-about, Folagoro, Lagos.';
+  const phone = settings?.contact_phone || '(555) 123-4567';
+  const email = settings?.contact_email || 'rccghop.123@gmail.com';
+  const mapsUrl = settings?.google_maps_url || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+  const whatsapp = settings?.whatsapp_phone || phone;
+  const whatsappUrl = `https://wa.me/${String(whatsapp).replace(/\D/g, '')}`;
 
   return (
     <div className="pt-20">
       {/* Hero */}
-      <section className="bg-primary py-32 text-white relative overflow-hidden">
+      <section
+        className="bg-primary py-32 text-white relative overflow-hidden"
+        style={settings?.page_header_images?.about ? { backgroundImage: `linear-gradient(rgba(5, 45, 79, 0.76), rgba(5, 45, 79, 0.76)), url(${settings.page_header_images.about})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}
+      >
         <div className="w-full px-8 md:px-16 relative z-10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -78,26 +87,53 @@ export default function About() {
               RCCG House of Prayer for All Nations (HOPFAN) is a vibrant community dedicated to worship, 
               spiritual growth, and serving our generation with the love of Christ.
             </p>
-            <div className="pt-6 space-y-4 max-w-2xl">
-              <Link to={{ pathname: '/', hash: '#departments' }} className="inline-flex text-accent font-bold text-lg underline underline-offset-8">
-                Join us in service
-              </Link>
-              {socialLinks.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {socialLinks.map((link: any) => (
-                    <a key={`${link.label}-${link.url}`} href={link.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 border border-white/15 px-4 py-2 text-sm font-bold text-stone-100 hover:border-accent hover:text-accent transition-colors">
-                      {link.label} <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
-                  ))}
-                </div>
-              ) : null}
-              <p className="text-stone-300 leading-relaxed">
-                Service is physical. Anyone who wants to serve must present himself or herself to the proper head of department for final screening and admittance.
-              </p>
-            </div>
           </motion.div>
         </div>
         <div className="absolute -right-20 -bottom-20 w-[600px] h-[600px] bg-accent/5 rounded-full blur-[120px]" />
+      </section>
+
+      <section id="get-in-touch" className="w-full px-6 sm:px-8 md:px-16 py-20 sm:py-28 bg-white border-t-2 border-stone-200">
+        <div className="max-w-7xl mx-auto grid lg:grid-cols-[0.85fr_1.15fr] gap-10 lg:gap-16 items-start">
+          <div className="space-y-5">
+            <div className="inline-block bg-primary/10 text-primary px-5 py-2 text-xs font-bold uppercase tracking-widest">Get in Touch</div>
+            <h2 className="text-4xl sm:text-5xl md:text-7xl font-serif font-bold text-primary leading-tight">Connect with us</h2>
+            <p className="text-lg sm:text-xl text-stone-500 font-light leading-relaxed">Visit us, call, send an email, or connect with us online.</p>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-5">
+            <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="p-6 border border-stone-200 bg-stone-50 hover:border-accent transition-colors sm:col-span-2">
+              <MapPin className="w-7 h-7 text-accent mb-5" />
+              <p className="text-xs font-bold uppercase tracking-widest text-stone-400 mb-2">Our Location</p>
+              <p className="text-xl text-primary font-semibold leading-relaxed">{address}</p>
+            </a>
+            <a href={`tel:${phone}`} className="p-6 border border-stone-200 bg-white hover:border-accent transition-colors">
+              <Phone className="w-7 h-7 text-accent mb-5" />
+              <p className="text-xs font-bold uppercase tracking-widest text-stone-400 mb-2">Phone Number</p>
+              <p className="text-xl text-primary font-semibold">{phone}</p>
+            </a>
+            <a href={`mailto:${email}`} className="p-6 border border-stone-200 bg-white hover:border-accent transition-colors">
+              <Mail className="w-7 h-7 text-accent mb-5" />
+              <p className="text-xs font-bold uppercase tracking-widest text-stone-400 mb-2">Email Address</p>
+              <p className="text-xl text-primary font-semibold break-all">{email}</p>
+            </a>
+            <div className="p-6 border border-stone-200 bg-primary text-white sm:col-span-2">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-accent mb-2">Connect with us Online</p>
+                  <div className="flex flex-wrap gap-2">
+                    {socialLinks.map((link: any) => (
+                      <a key={`${link.label}-${link.url}`} href={link.url} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 w-11 items-center justify-center border border-white/20 text-white hover:border-accent hover:text-accent transition-colors" aria-label={link.label}>
+                        <SocialIcon label={link.label} url={link.url} />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+                <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 bg-accent px-5 py-3 text-sm font-bold uppercase tracking-widest text-white">
+                  <MessageCircle className="w-4 h-4" /> WhatsApp
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* Mission & Vision - Full Width 50/50 */}

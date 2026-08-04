@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { User as UserIcon, Upload, LogOut, ArrowLeft, Loader2 } from 'lucide-react';
+import { User as UserIcon, Upload, LogOut, ArrowLeft, Loader2, Calendar } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { uploadToSupabasePublicBucket } from '../services/uploadService';
@@ -12,6 +12,8 @@ type ProfileRow = {
   full_name: string | null;
   avatar_url: string | null;
   role: string | null;
+  birth_month?: number | null;
+  birth_day?: number | null;
 };
 
 export default function Profile() {
@@ -20,6 +22,8 @@ export default function Profile() {
 
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [fullName, setFullName] = useState('');
+  const [birthMonth, setBirthMonth] = useState('');
+  const [birthDay, setBirthDay] = useState('');
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
@@ -37,6 +41,11 @@ export default function Profile() {
     const name = (profile?.full_name || user?.email || '').trim();
     return name ? name.charAt(0).toUpperCase() : '?';
   }, [profile?.full_name, user?.email]);
+
+  const isBirthday = useMemo(() => {
+    const today = new Date();
+    return Number(profile?.birth_month) === today.getMonth() + 1 && Number(profile?.birth_day) === today.getDate();
+  }, [profile?.birth_month, profile?.birth_day]);
 
   useEffect(() => {
     const init = async () => {
@@ -57,6 +66,8 @@ export default function Profile() {
       } else if (data) {
         setProfile(data as ProfileRow);
         setFullName((data as any).full_name || '');
+        setBirthMonth((data as any).birth_month ? String((data as any).birth_month) : '');
+        setBirthDay((data as any).birth_day ? String((data as any).birth_day) : '');
       }
       const progressRows = !progressRes.error ? ((progressRes.data || []) as WatchProgress[]) : [];
       const downloadRows = !downloadsRes.error ? ((downloadsRes.data || []) as ContentDownload[]) : [];
@@ -81,12 +92,26 @@ export default function Profile() {
     if (!user) return;
     setSaving(true);
     try {
+      const payload = {
+        full_name: fullName,
+        birth_month: birthMonth ? Number(birthMonth) : null,
+        birth_day: birthDay ? Number(birthDay) : null,
+        updated_at: new Date().toISOString(),
+      };
       const { error } = await supabase
         .from('profiles')
-        .update({ full_name: fullName, updated_at: new Date().toISOString() })
+        .update(payload)
         .eq('id', user.id);
-      if (error) throw error;
-      setProfile(prev => (prev ? { ...prev, full_name: fullName } : prev));
+      if (error) {
+        const msg = String(error.message || '');
+        if (!msg.includes('birth_month') && !msg.includes('birth_day') && !msg.includes('schema cache')) throw error;
+        const { error: fallbackError } = await supabase
+          .from('profiles')
+          .update({ full_name: fullName, updated_at: new Date().toISOString() })
+          .eq('id', user.id);
+        if (fallbackError) throw fallbackError;
+      }
+      setProfile(prev => (prev ? { ...prev, full_name: fullName, birth_month: payload.birth_month, birth_day: payload.birth_day } : prev));
     } catch (err) {
       console.error('Error saving profile:', err);
       alert('Failed to save profile');
@@ -144,6 +169,24 @@ export default function Profile() {
 
   return (
     <div className="min-h-screen bg-stone-50 pt-28 pb-20 px-4">
+      {isBirthday ? (
+        <div className="pointer-events-none fixed inset-0 z-[60] overflow-hidden" aria-hidden="true">
+          {Array.from({ length: 18 }, (_, index) => (
+            <div
+              key={index}
+              className="absolute bottom-[-6rem] w-10 h-12 rounded-full opacity-80 animate-[birthday-float_7s_ease-in_infinite]"
+              style={{
+                left: `${(index * 17) % 100}%`,
+                animationDelay: `${(index % 9) * 0.45}s`,
+                background: ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#a855f7', '#ec4899'][index % 6],
+              }}
+            >
+              <span className="absolute left-1/2 top-full h-12 w-px bg-stone-400/40" />
+            </div>
+          ))}
+          <style>{`@keyframes birthday-float{0%{transform:translateY(0) translateX(0) scale(.8)}100%{transform:translateY(-115vh) translateX(32px) scale(1.08)}}`}</style>
+        </div>
+      ) : null}
       <div className="max-w-3xl mx-auto space-y-8">
         <Link to="/" className="inline-flex items-center gap-2 text-stone-500 hover:text-primary transition-colors font-bold uppercase tracking-widest text-xs">
           <ArrowLeft className="w-4 h-4" /> Back to Home
@@ -207,6 +250,38 @@ export default function Profile() {
                   className="w-full pl-12 pr-4 py-4 bg-white border border-stone-200 focus:ring-4 focus:ring-accent/10 focus:border-accent outline-none transition-all"
                   placeholder="Your name"
                 />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Birth Month</label>
+                <div className="relative">
+                  <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-stone-400" />
+                  <select
+                    value={birthMonth}
+                    onChange={(e) => setBirthMonth(e.target.value)}
+                    className="w-full pl-12 pr-4 py-4 bg-white border border-stone-200 focus:ring-4 focus:ring-accent/10 focus:border-accent outline-none transition-all appearance-none"
+                  >
+                    <option value="">Month</option>
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
+                      <option key={month} value={month}>{month}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Birth Day</label>
+                <select
+                  value={birthDay}
+                  onChange={(e) => setBirthDay(e.target.value)}
+                  className="w-full px-4 py-4 bg-white border border-stone-200 focus:ring-4 focus:ring-accent/10 focus:border-accent outline-none transition-all appearance-none"
+                >
+                  <option value="">Day</option>
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                    <option key={day} value={day}>{day}</option>
+                  ))}
+                </select>
               </div>
             </div>
 

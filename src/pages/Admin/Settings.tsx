@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { SiteSettings, Department, Leadership, GalleryItem, Devotional, NewsletterSubscription, ChurchEvent, GivingAccount, AdminRole, AdminSection, RolePermissions, HomeBannerItem } from '../../types';
-import { Save, Plus, Trash2, Image as ImageIcon, Users, Clock, Info, Upload, Loader2, BookOpen, Mail, Calendar, Sparkles, ChevronUp, ChevronDown, Type, MapPin, Landmark, Video, Search } from 'lucide-react';
+import { Save, Plus, Trash2, Image as ImageIcon, Users, Clock, Info, Upload, Loader2, BookOpen, Mail, Calendar, Sparkles, ChevronUp, ChevronDown, Type, MapPin, Landmark, Video, Search, Phone } from 'lucide-react';
 import { motion } from 'motion/react';
 import { supabase } from '../../lib/supabase';
 import { uploadToR2ViaPresign, uploadToSupabasePublicBucket } from '../../services/uploadService';
@@ -73,9 +73,24 @@ function readSocialLinks(settings: SiteSettings | null) {
   return Array.isArray((settings as any)?.social_links)
     ? ((settings as any).social_links as any[])
         .map((link) => ({ label: String(link?.label || '').trim(), url: String(link?.url || '').trim() }))
-        .filter((link) => link.label || link.url)
     : [];
 }
+
+function normalizeSocialLinks(settings: SiteSettings | null) {
+  return readSocialLinks(settings).filter((link) => link.label && link.url);
+}
+
+const PAGE_HEADER_LABELS = [
+  ['home', 'Home'],
+  ['about', 'About'],
+  ['contact', 'Contact'],
+  ['sermons', 'Sermons'],
+  ['editorial', 'Editorial'],
+  ['devotionals', 'Devotionals'],
+  ['events', 'Events'],
+  ['gallery', 'Gallery'],
+  ['forms', 'Forms'],
+] as const;
 
 function readVisitItems(settings: SiteSettings | null) {
   const defaults = [
@@ -158,6 +173,7 @@ function resolveSectionMode(title: string): SettingsMode {
       return 'overview';
     case 'About Us':
     case 'Social Links':
+    case 'Page Header Images':
     case 'Mission & Vision':
     case "Pastor's Welcome":
       return 'content';
@@ -290,6 +306,10 @@ export default function AdminSettings() {
     }
   };
 
+  const normalizeUploadName = (name: string) => (
+    name.normalize('NFKD').replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '') || `upload-${Date.now()}`
+  );
+
   const handleImageUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     type: 'hero' | 'gallery' | 'leadership' | 'department' | 'pastor' | 'identity' | 'auth' | 'admin_auth',
@@ -300,8 +320,7 @@ export default function AdminSettings() {
 
     setUploading(true);
     try {
-      const normalizedName = file.name.normalize('NFKD');
-      const safeName = normalizedName.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '') || `upload-${Date.now()}`;
+      const safeName = normalizeUploadName(file.name);
       const timestampedName = `${Date.now()}-${safeName}`.slice(0, 160);
 
       const publicUrl =
@@ -375,8 +394,7 @@ export default function AdminSettings() {
 
     setUploading(true);
     try {
-      const normalizedName = file.name.normalize('NFKD');
-      const safeName = normalizedName.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '') || `upload-${Date.now()}`;
+      const safeName = normalizeUploadName(file.name);
       const timestampedName = `${Date.now()}-${safeName}`.slice(0, 160);
       const publicUrl = await uploadToSupabasePublicBucket({
         bucket: 'site-images',
@@ -481,6 +499,36 @@ export default function AdminSettings() {
     });
   };
 
+  const handleHeaderImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, key: string) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const safeName = normalizeUploadName(file.name);
+      const publicUrl = await uploadToSupabasePublicBucket({
+        bucket: 'site-images',
+        file,
+        objectPath: `site/page-headers/${key}-${Date.now()}-${safeName}`,
+      });
+      setSettings(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          page_header_images: {
+            ...((prev as any).page_header_images || {}),
+            [key]: publicUrl,
+          },
+        } as any;
+      });
+    } catch (error) {
+      console.error('Header image upload error:', error);
+      alert('Failed to upload header image.');
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  };
+
   const handleUpdateSocialLink = (index: number, field: 'label' | 'url', value: string) => {
     setSettings(prev => {
       if (!prev) return null;
@@ -566,8 +614,12 @@ export default function AdminSettings() {
         core_values: Array.isArray((settings as any).core_values) ? (settings as any).core_values : [],
         service_times: Array.isArray((settings as any).service_times) ? (settings as any).service_times : [],
         contact_email: (settings as any).contact_email ?? null,
+        contact_phone: (settings as any).contact_phone ?? null,
+        whatsapp_phone: (settings as any).whatsapp_phone ?? null,
         address: (settings as any).address ?? null,
-        social_links: readSocialLinks(settings),
+        google_maps_url: (settings as any).google_maps_url ?? null,
+        social_links: normalizeSocialLinks(settings),
+        page_header_images: (settings as any).page_header_images || {},
         giving_accounts: normalizedGivingAccounts,
         giving_bank_name: primaryGivingAccount?.bank_name ?? null,
         giving_account_name: primaryGivingAccount?.account_name ?? null,
@@ -641,8 +693,18 @@ export default function AdminSettings() {
           (msg.includes('schema cache') && msg.includes('social_links')) ||
           msg.includes('column "social_links"') ||
           msg.includes("Could not find the 'social_links' column");
+        const missingPageHeaders =
+          (msg.includes('schema cache') && msg.includes('page_header_images')) ||
+          msg.includes('column "page_header_images"') ||
+          msg.includes("Could not find the 'page_header_images' column");
+        const missingContactFields =
+          (msg.includes('schema cache') && (msg.includes('whatsapp_phone') || msg.includes('google_maps_url'))) ||
+          msg.includes('column "whatsapp_phone"') ||
+          msg.includes('column "google_maps_url"') ||
+          msg.includes("Could not find the 'whatsapp_phone' column") ||
+          msg.includes("Could not find the 'google_maps_url' column");
 
-        if (!missingGivingAccounts && !missingFeaturedDepartments && !missingRolePermissions && !missingHomeBanner && !missingLiveEmbed && !missingFeaturedLayout && !missingTeamLists && !missingVisitFields && !missingSocialLinks) throw settingsError;
+        if (!missingGivingAccounts && !missingFeaturedDepartments && !missingRolePermissions && !missingHomeBanner && !missingLiveEmbed && !missingFeaturedLayout && !missingTeamLists && !missingVisitFields && !missingSocialLinks && !missingPageHeaders && !missingContactFields) throw settingsError;
 
         const {
           giving_accounts: _ignoredGivingAccounts,
@@ -668,6 +730,9 @@ export default function AdminSettings() {
           visit_intro: _ignoredVisitIntro,
           visit_items: _ignoredVisitItems,
           social_links: _ignoredSocialLinks,
+          page_header_images: _ignoredPageHeaderImages,
+          whatsapp_phone: _ignoredWhatsappPhone,
+          google_maps_url: _ignoredGoogleMapsUrl,
           ...fallbackPayload
         } = siteSettingsPayload as any;
 
@@ -2006,6 +2071,103 @@ export default function AdminSettings() {
             rows={10}
             placeholder="Write the About Us section content..."
           />
+        </div>
+      </CollapsiblePanel>
+
+      <CollapsiblePanel
+        id="contact-details"
+        title="Contact Details"
+        description="Address, Google Maps, phone, WhatsApp, and email links."
+      >
+        <SectionSaveButton label="Save Contact Details" />
+        <h2 className="text-2xl font-serif font-bold flex items-center gap-3">
+          <Phone className="w-6 h-6 text-accent" />
+          Contact Details
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-3 md:col-span-2">
+            <label className="text-sm font-bold text-stone-700 uppercase tracking-widest">Church Address</label>
+            <input
+              value={(settings as any)?.address || ''}
+              onChange={(e) => setSettings(prev => prev ? ({ ...(prev as any), address: e.target.value } as any) : null)}
+              className="w-full p-4 border border-stone-200 focus:ring-4 focus:ring-accent/10 outline-none transition-all"
+              placeholder="31, Adetayo-osho street, by Folagoro round-about, Folagoro, Lagos."
+            />
+          </div>
+          <div className="space-y-3">
+            <label className="text-sm font-bold text-stone-700 uppercase tracking-widest">Phone Number</label>
+            <input
+              value={(settings as any)?.contact_phone || ''}
+              onChange={(e) => setSettings(prev => prev ? ({ ...(prev as any), contact_phone: e.target.value } as any) : null)}
+              className="w-full p-4 border border-stone-200 focus:ring-4 focus:ring-accent/10 outline-none transition-all"
+              placeholder="(555) 123-4567"
+            />
+          </div>
+          <div className="space-y-3">
+            <label className="text-sm font-bold text-stone-700 uppercase tracking-widest">WhatsApp Number</label>
+            <input
+              value={(settings as any)?.whatsapp_phone || ''}
+              onChange={(e) => setSettings(prev => prev ? ({ ...(prev as any), whatsapp_phone: e.target.value } as any) : null)}
+              className="w-full p-4 border border-stone-200 focus:ring-4 focus:ring-accent/10 outline-none transition-all"
+              placeholder="+234..."
+            />
+          </div>
+          <div className="space-y-3">
+            <label className="text-sm font-bold text-stone-700 uppercase tracking-widest">Email Address</label>
+            <input
+              value={(settings as any)?.contact_email || ''}
+              onChange={(e) => setSettings(prev => prev ? ({ ...(prev as any), contact_email: e.target.value } as any) : null)}
+              className="w-full p-4 border border-stone-200 focus:ring-4 focus:ring-accent/10 outline-none transition-all"
+              placeholder="rccghop.123@gmail.com"
+            />
+          </div>
+          <div className="space-y-3">
+            <label className="text-sm font-bold text-stone-700 uppercase tracking-widest">Google Maps Link</label>
+            <input
+              value={(settings as any)?.google_maps_url || ''}
+              onChange={(e) => setSettings(prev => prev ? ({ ...(prev as any), google_maps_url: e.target.value } as any) : null)}
+              className="w-full p-4 border border-stone-200 focus:ring-4 focus:ring-accent/10 outline-none transition-all"
+              placeholder="https://maps.app.goo.gl/..."
+            />
+          </div>
+        </div>
+      </CollapsiblePanel>
+
+      <CollapsiblePanel
+        id="page-header-images"
+        title="Page Header Images"
+        description="Upload hero/header images for public pages."
+      >
+        <SectionSaveButton label="Save Header Images" />
+        <h2 className="text-2xl font-serif font-bold flex items-center gap-3">
+          <ImageIcon className="w-6 h-6 text-accent" />
+          Page Header Images
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+          {PAGE_HEADER_LABELS.filter(([key]) => key !== 'home' && key !== 'forms' && key !== 'contact').map(([key, label]) => {
+            const imageUrl = (settings as any)?.page_header_images?.[key] || '';
+            return (
+              <div key={key} className="border border-stone-200 bg-stone-50 p-4 space-y-4">
+                <div className="aspect-video bg-white border border-stone-200 overflow-hidden">
+                  {imageUrl ? <img src={imageUrl} alt={`${key} header`} className="w-full h-full object-cover" /> : <div className="h-full flex items-center justify-center text-stone-400 text-sm">No image</div>}
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-bold text-primary">{label}</p>
+                  <label className="inline-flex cursor-pointer items-center gap-2 bg-primary px-3 py-2 text-xs font-bold uppercase tracking-widest text-white">
+                    <Upload className="w-4 h-4" />
+                    {uploading ? 'Uploading' : 'Upload'}
+                    <input type="file" accept="image/*" className="sr-only" onChange={(e) => handleHeaderImageUpload(e, key)} />
+                  </label>
+                </div>
+                <input
+                  value={imageUrl}
+                  onChange={(e) => setSettings(prev => prev ? ({ ...(prev as any), page_header_images: { ...((prev as any).page_header_images || {}), [key]: e.target.value } } as any) : null)}
+                  className="w-full border border-stone-200 bg-white p-3 text-sm outline-none"
+                  placeholder="https://..."
+                />
+              </div>
+            );
+          })}
         </div>
       </CollapsiblePanel>
 

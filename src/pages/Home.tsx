@@ -8,6 +8,7 @@ import Modal from '../components/Modal';
 import { supabase } from '../lib/supabase';
 import MarkdownContent from '../components/MarkdownContent';
 import Seo from '../components/Seo';
+import { useAuth } from '../contexts/AuthContext';
 
 function formatHeroTitle(title: string) {
   return title
@@ -81,6 +82,11 @@ export default function Home() {
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
   const [events, setEvents] = useState<ChurchEvent[]>([]);
   const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
+  const [birthdayName, setBirthdayName] = useState('');
+  const [birthdayActive, setBirthdayActive] = useState(false);
+  const [birthdayVisible, setBirthdayVisible] = useState(false);
+  const [birthdaySlide, setBirthdaySlide] = useState<1 | 2>(1);
+  const { user } = useAuth();
 
   useEffect(() => {
     async function fetchAllData() {
@@ -137,6 +143,40 @@ export default function Home() {
     }
     fetchAllData();
   }, []);
+
+  useEffect(() => {
+    async function loadBirthday() {
+      if (!user) {
+        setBirthdayActive(false);
+        return;
+      }
+      const today = new Date();
+      const { data } = await supabase
+        .from('profiles')
+        .select('full_name,birth_month,birth_day')
+        .eq('id', user.id)
+        .maybeSingle();
+      const isToday = Number((data as any)?.birth_month) === today.getMonth() + 1 && Number((data as any)?.birth_day) === today.getDate();
+      setBirthdayActive(isToday);
+      setBirthdayName((data as any)?.full_name || String(user.email || 'friend').split('@')[0]);
+    }
+    loadBirthday();
+  }, [user?.id, user]);
+
+  useEffect(() => {
+    if (!birthdayActive) {
+      setBirthdayVisible(false);
+      return;
+    }
+    setBirthdaySlide(1);
+    setBirthdayVisible(true);
+    const slideTimer = window.setTimeout(() => setBirthdaySlide(2), 3400);
+    const hideTimer = window.setTimeout(() => setBirthdayVisible(false), 7200);
+    return () => {
+      window.clearTimeout(slideTimer);
+      window.clearTimeout(hideTimer);
+    };
+  }, [birthdayActive]);
 
 
   // Default values if settings are not yet in DB
@@ -427,6 +467,41 @@ export default function Home() {
         image={heroImages[0] || heroPrimaryImage || '/Rccg_logo.png'}
         path="/"
       />
+      {birthdayVisible ? (
+        <div className="pointer-events-none fixed inset-0 z-[60] overflow-hidden" aria-hidden="true">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={birthdaySlide}
+              initial={{ opacity: 0, x: 80 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -80 }}
+              transition={{ duration: 0.55, ease: 'easeOut' }}
+              className="absolute left-1/2 top-24 w-[min(92vw,30rem)] -translate-x-1/2 bg-white/95 border border-accent/30 px-6 py-5 shadow-2xl text-center"
+            >
+              {birthdaySlide === 1 ? (
+                <>
+                  <p className="text-xs font-bold uppercase tracking-[0.3em] text-accent">Birthday Blessings</p>
+                  <p className="mt-1 text-2xl sm:text-3xl font-serif font-bold text-primary">Happy birthday, {birthdayName}</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs font-bold uppercase tracking-[0.3em] text-accent">From RCCG HOPFAN</p>
+                  <p className="mt-1 text-xl sm:text-2xl font-serif font-bold text-primary">Joy, strength, and fresh grace today.</p>
+                </>
+              )}
+            </motion.div>
+          </AnimatePresence>
+          {Array.from({ length: 36 }, (_, index) => (
+            <div key={`confetti-${index}`} className="absolute top-[-2rem] h-3 w-2 animate-[home-confetti-fall_3.2s_linear_forwards]" style={{ left: `${(index * 19) % 100}%`, animationDelay: `${(index % 12) * 0.12}s`, transform: `rotate(${index * 17}deg)`, background: ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#a855f7', '#ec4899'][index % 6] }} />
+          ))}
+          {Array.from({ length: 22 }, (_, index) => (
+            <div key={index} className="absolute bottom-[-6rem] w-9 h-12 rounded-full opacity-80 animate-[home-birthday-float_6.8s_ease-in_forwards]" style={{ left: `${(index * 13) % 100}%`, animationDelay: `${(index % 11) * 0.22}s`, background: ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#a855f7', '#ec4899'][index % 6] }}>
+              <span className="absolute left-1/2 top-full h-12 w-px bg-stone-500/35" />
+            </div>
+          ))}
+          <style>{`@keyframes home-birthday-float{0%{transform:translateY(0) translateX(0) scale(.82);opacity:.85}85%{opacity:.85}100%{transform:translateY(-118vh) translateX(34px) scale(1.08);opacity:0}}@keyframes home-confetti-fall{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(105vh) rotate(720deg);opacity:0}}`}</style>
+        </div>
+      ) : null}
       {/* Hero Section */}
       <section className="relative h-[90vh] flex items-center justify-start overflow-hidden bg-primary">
         {heroImages.length > 0 && (
@@ -436,7 +511,7 @@ export default function Home() {
               initial={{ opacity: 0, scale: 1.05 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 1.02 }}
-              transition={{ duration: 1.0 }}
+              transition={{ duration: 1.5, ease: 'easeInOut' }}
               src={heroImages[heroIndex]}
               alt="Hero"
               className="absolute inset-0 w-full h-full object-cover opacity-40"
@@ -451,7 +526,8 @@ export default function Home() {
             <motion.h1
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
-              className="font-display text-3xl sm:text-4xl md:text-6xl lg:text-7xl text-white font-bold mb-6 tracking-[-0.03em] leading-[0.95] max-w-[14ch] drop-shadow-[0_8px_30px_rgba(0,0,0,0.35)]"
+              transition={{ duration: 0.8, ease: 'easeOut' }}
+              className="font-display text-3xl sm:text-4xl md:text-6xl lg:text-7xl text-white font-bold mb-6 tracking-tight leading-[0.98] max-w-[15ch] drop-shadow-[0_8px_30px_rgba(0,0,0,0.35)]"
             >
               {renderHeroTitle(heroTitle)}
             </motion.h1>
@@ -466,26 +542,6 @@ export default function Home() {
               {heroSubtitle}
             </motion.p>
           )}
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="flex flex-col sm:flex-row justify-start gap-4 sm:gap-6"
-          >
-            <Link
-              to="/sermons"
-              className="bg-accent hover:bg-accent/90 text-white px-10 py-4 font-bold flex items-center justify-center gap-3 transition-all shadow-xl shadow-accent/20 w-full sm:w-auto"
-            >
-              <Play className="w-5 h-5" />
-              Listen Now
-            </Link>
-            <Link
-              to="/sermons"
-              className="bg-white/10 hover:bg-white/20 text-white backdrop-blur-md border border-white/30 px-10 py-4 font-bold transition-all w-full sm:w-auto text-center"
-            >
-              Recent Sermons
-            </Link>
-          </motion.div>
           </div>
         </div>
 

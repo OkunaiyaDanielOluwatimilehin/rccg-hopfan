@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Post } from '../../types';
-import { Search, Loader2, Calendar, FileText, Plus, Edit2, Trash2, Image as ImageIcon, X, Save } from 'lucide-react';
+import { Search, Loader2, Calendar, FileText, Plus, Edit2, Trash2, Image as ImageIcon, X, Save, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
 import MiniTextEditor from '../../components/MiniTextEditor';
 import { supabase } from '../../lib/supabase';
 import { uploadToR2ViaPresign } from '../../services/uploadService';
+
+const PAGE_SIZE = 6;
 
 function slugify(input: string) {
   return (input || '')
@@ -40,6 +42,7 @@ export default function AdminPosts() {
   const [visibilityMode, setVisibilityMode] = useState<'published' | 'scheduled' | 'draft'>('published');
   const [actionLoading, setActionLoading] = useState<'draft' | 'published' | 'scheduled' | null>(null);
   const [formData, setFormData] = useState(initialFormData);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     fetchPosts();
@@ -186,6 +189,13 @@ export default function AdminPosts() {
   const filteredPosts = posts.filter(p => 
     p.title.toLowerCase().includes(search.toLowerCase())
   );
+  const pageCount = Math.max(1, Math.ceil(filteredPosts.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pagedPosts = filteredPosts.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
 
   const postCounts = posts.reduce(
     (acc, post) => {
@@ -482,7 +492,7 @@ export default function AdminPosts() {
                     <td className="px-8 py-6 text-right"><div className="h-4 bg-stone-100 rounded w-12 ml-auto" /></td>
                   </tr>
                 ))
-              ) : filteredPosts.map((post) => (
+              ) : pagedPosts.map((post) => (
                 <tr key={post.id} className="hover:bg-stone-50/50 transition-colors group">
                   <td className="px-8 py-6 font-bold text-primary text-base tracking-tight">{post.title}</td>
                   <td className="px-8 py-6">
@@ -528,6 +538,17 @@ export default function AdminPosts() {
             </div>
           )}
         </div>
+        {!loading && filteredPosts.length > PAGE_SIZE ? (
+          <div className="flex items-center justify-center gap-3 border-t border-stone-100 p-5">
+            <button type="button" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={currentPage === 1} className="inline-flex items-center gap-2 border border-stone-200 bg-white px-4 py-3 text-xs font-bold uppercase tracking-widest text-primary disabled:opacity-40">
+              <ChevronLeft className="w-4 h-4" /> Prev
+            </button>
+            <span className="text-xs font-bold uppercase tracking-widest text-stone-500">Page {currentPage} / {pageCount}</span>
+            <button type="button" onClick={() => setPage((value) => Math.min(pageCount, value + 1))} disabled={currentPage === pageCount} className="inline-flex items-center gap-2 border border-stone-200 bg-white px-4 py-3 text-xs font-bold uppercase tracking-widest text-primary disabled:opacity-40">
+              Next <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        ) : null}
       </div>
 
     </div>

@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Outlet, Link } from 'react-router-dom';
 import Navbar from './Navbar';
-import { ExternalLink, Mail, MapPin } from 'lucide-react';
+import { Mail, MapPin } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { SiteSettings } from '../types';
+import SocialIcon from './SocialIcon';
 
 export default function Layout() {
   const [settings, setSettings] = useState<SiteSettings | null>(null);
@@ -82,8 +83,8 @@ export default function Layout() {
               {socialLinks.length > 0 ? (
                 <div className="mt-6 flex flex-wrap gap-2">
                   {socialLinks.map((link: any) => (
-                    <a key={`${link.label}-${link.url}`} href={link.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 border border-white/10 px-3 py-2 text-xs font-bold text-stone-200 hover:border-accent hover:text-accent transition-colors">
-                      {link.label} <ExternalLink className="w-3 h-3" />
+                    <a key={`${link.label}-${link.url}`} href={link.url} target="_blank" rel="noopener noreferrer" className="inline-flex h-10 w-10 items-center justify-center border border-white/10 text-stone-200 hover:border-accent hover:text-accent transition-colors" aria-label={link.label}>
+                      <SocialIcon label={link.label} url={link.url} />
                     </a>
                   ))}
                 </div>

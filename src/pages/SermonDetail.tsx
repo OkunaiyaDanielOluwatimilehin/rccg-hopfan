@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
 import { Sermon, SermonComment, SermonNote } from '../types';
 import { Calendar, ArrowLeft, Play, Music, FileText, Share2, Download, Loader2, Bookmark, MessageSquare, ThumbsUp, UserRound, Tag, Trash2 } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -47,7 +47,8 @@ export default function SermonDetail() {
   const { id } = useParams();
   const [sermon, setSermon] = useState<Sermon | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'video' | 'audio' | 'text'>('text');
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState<'video' | 'audio' | 'text'>('audio');
   const [detailTab, setDetailTab] = useState<'about' | 'comments' | 'notes'>('about');
   const [aboutExpanded, setAboutExpanded] = useState(false);
   const [contentExpanded, setContentExpanded] = useState(false);
@@ -61,8 +62,8 @@ export default function SermonDetail() {
   const availableTabs = useMemo(
     () =>
       [
-        sermon?.video_url ? 'video' : null,
         sermon?.audio_url ? 'audio' : null,
+        sermon?.video_url ? 'video' : null,
         sermon?.content ? 'text' : null,
       ].filter(Boolean) as Array<'video' | 'audio' | 'text'>,
     [sermon],
@@ -276,10 +277,14 @@ export default function SermonDetail() {
 
   useEffect(() => {
     if (!availableTabs.length) return;
+    if (location.hash === '#audio' && availableTabs.includes('audio')) {
+      setActiveTab('audio');
+      return;
+    }
     if (!availableTabs.includes(activeTab)) {
       setActiveTab(availableTabs[0]);
     }
-  }, [availableTabs, activeTab]);
+  }, [availableTabs, activeTab, location.hash]);
 
   useEffect(() => {
     if (!sermon?.id) return;
@@ -965,7 +970,7 @@ export default function SermonDetail() {
                     </div>
 
                     {relatedSermons.length > 0 ? (
-                      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-3 md:grid-cols-6 gap-3 sm:gap-4">
                         {relatedSermons.map((item) => (
                           <Link
                             key={item.id}

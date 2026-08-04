@@ -2,15 +2,19 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { format } from 'date-fns';
-import { Calendar, ArrowRight, BookOpen, Quote, Sparkles } from 'lucide-react';
+import { Calendar, ArrowRight, BookOpen, Quote, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Post, Devotional } from '../types';
 import { supabase } from '../lib/supabase';
 import Seo from '../components/Seo';
+
+const PAGE_SIZE = 6;
 
 export default function Editorial() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [devotionals, setDevotionals] = useState<Devotional[]>([]);
   const [loading, setLoading] = useState(true);
+  const [postPage, setPostPage] = useState(1);
+  const [devotionalPage, setDevotionalPage] = useState(1);
 
   useEffect(() => {
     async function fetchEditorial() {
@@ -23,8 +27,8 @@ export default function Editorial() {
             .eq('status', 'published')
             .lte('published_at', nowIso)
             .order('published_at', { ascending: false })
-            .limit(12),
-          supabase.from('devotionals').select('*').order('date', { ascending: false }).limit(8),
+            .limit(60),
+          supabase.from('devotionals').select('*').order('date', { ascending: false }).limit(60),
         ]);
 
         if (postsRes.error) throw postsRes.error;
@@ -41,6 +45,11 @@ export default function Editorial() {
 
     fetchEditorial();
   }, []);
+
+  const postPageCount = Math.max(1, Math.ceil(posts.length / PAGE_SIZE));
+  const devotionalPageCount = Math.max(1, Math.ceil(devotionals.length / PAGE_SIZE));
+  const visiblePosts = posts.slice((postPage - 1) * PAGE_SIZE, postPage * PAGE_SIZE);
+  const visibleDevotionals = devotionals.slice((devotionalPage - 1) * PAGE_SIZE, devotionalPage * PAGE_SIZE);
 
   return (
     <div className="pt-20 min-h-screen bg-cream overflow-x-hidden">
@@ -107,7 +116,7 @@ export default function Editorial() {
             </div>
           ) : (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-10">
-              {posts.map((post) => (
+              {visiblePosts.map((post) => (
                 <Link key={post.id} to={`/editorial/${post.slug}`} className="min-w-0">
                   <motion.div whileHover={{ y: -8 }} className="bg-white border border-stone-100 overflow-hidden h-full flex flex-col rounded-none">
                     <div className="relative aspect-[4/3] overflow-hidden">
@@ -133,6 +142,17 @@ export default function Editorial() {
               ))}
             </div>
           )}
+          {!loading && posts.length > PAGE_SIZE ? (
+            <div className="mt-10 flex items-center justify-center gap-3">
+              <button type="button" onClick={() => setPostPage((value) => Math.max(1, value - 1))} disabled={postPage === 1} className="inline-flex items-center gap-2 border border-stone-200 bg-white px-4 py-3 text-xs font-bold uppercase tracking-widest text-primary disabled:opacity-40">
+                <ChevronLeft className="w-4 h-4" /> Prev
+              </button>
+              <span className="text-xs font-bold uppercase tracking-widest text-stone-500">Page {postPage} / {postPageCount}</span>
+              <button type="button" onClick={() => setPostPage((value) => Math.min(postPageCount, value + 1))} disabled={postPage === postPageCount} className="inline-flex items-center gap-2 border border-stone-200 bg-white px-4 py-3 text-xs font-bold uppercase tracking-widest text-primary disabled:opacity-40">
+                Next <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          ) : null}
         </div>
       </section>
 
@@ -146,7 +166,7 @@ export default function Editorial() {
             <p className="text-stone-400 italic">No devotionals available yet.</p>
           ) : (
             <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-6 sm:gap-8">
-              {devotionals.map((dev) => (
+              {visibleDevotionals.map((dev) => (
                 <article key={dev.id} className="border border-stone-200 bg-stone-50/60 p-5 sm:p-6 rounded-none">
                   <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-accent mb-3">
                     {dev.date ? format(new Date(dev.date), 'MMM d, yyyy') : 'Devotional'}
@@ -158,6 +178,17 @@ export default function Editorial() {
               ))}
             </div>
           )}
+          {devotionals.length > PAGE_SIZE ? (
+            <div className="flex items-center justify-center gap-3">
+              <button type="button" onClick={() => setDevotionalPage((value) => Math.max(1, value - 1))} disabled={devotionalPage === 1} className="inline-flex items-center gap-2 border border-stone-200 bg-white px-4 py-3 text-xs font-bold uppercase tracking-widest text-primary disabled:opacity-40">
+                <ChevronLeft className="w-4 h-4" /> Prev
+              </button>
+              <span className="text-xs font-bold uppercase tracking-widest text-stone-500">Page {devotionalPage} / {devotionalPageCount}</span>
+              <button type="button" onClick={() => setDevotionalPage((value) => Math.min(devotionalPageCount, value + 1))} disabled={devotionalPage === devotionalPageCount} className="inline-flex items-center gap-2 border border-stone-200 bg-white px-4 py-3 text-xs font-bold uppercase tracking-widest text-primary disabled:opacity-40">
+                Next <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          ) : null}
         </div>
       </section>
     </div>

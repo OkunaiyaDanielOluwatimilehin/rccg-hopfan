@@ -49,6 +49,7 @@ export default function AdminDashboard() {
     { name: 'Events', path: '/admin/events', icon: CalendarDays, section: 'events' as const },
     { name: 'Testimonials', path: '/admin/testimonials', icon: MessageSquare, section: 'testimonials' as const },
     { name: 'Forms', path: '/admin/forms', icon: ListChecks, section: 'forms' as const },
+    { name: 'New Commers', path: '/admin/newcomers', icon: ClipboardList, section: 'newcomers' as const },
   ];
 
   const settingsItems = [
