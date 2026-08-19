@@ -22,7 +22,7 @@ function renderHeroTitle(title: string) {
   return formatted.split('\n').map((line, index) => (
     <motion.span
       key={`${line}-${index}`}
-      className={`block ${index === 1 ? 'mt-2 text-accent' : 'text-white'}`}
+      className={`block whitespace-nowrap ${index === 1 ? 'mt-2 text-accent' : 'text-white'}`}
       initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.12, duration: 0.65, ease: 'easeOut' }}
@@ -460,7 +460,7 @@ export default function Home() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.4, ease: 'easeOut' }}
-              className="font-display max-w-[17ch] text-[2rem] sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl text-white font-black mb-7 leading-[1.02] tracking-normal drop-shadow-[0_10px_34px_rgba(0,0,0,0.45)]"
+              className="font-display max-w-none text-[1.35rem] sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl text-white font-black mb-7 leading-[1.04] tracking-normal drop-shadow-[0_10px_34px_rgba(0,0,0,0.45)]"
             >
               {renderHeroTitle(heroTitle)}
             </motion.h1>

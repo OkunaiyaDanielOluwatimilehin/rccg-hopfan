@@ -72,6 +72,10 @@ export default function AdminAnalytics() {
         const response = await fetch(`/api/admin/analytics?days=${period}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          throw new Error('Analytics API returned a page instead of JSON. Check Vercel API routing.');
+        }
         const body = await response.json();
         if (!response.ok) throw new Error(body?.error || 'Could not load analytics.');
         if (!cancelled) setPayload(body);
