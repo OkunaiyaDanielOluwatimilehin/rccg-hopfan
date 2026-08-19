@@ -7,6 +7,8 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import dotenv from "dotenv";
 import { createRequire } from "module";
 import { createClient } from "@supabase/supabase-js";
+import webPush from "web-push";
+import { buildAnalyticsPayload } from "./src/lib/analytics";
 
 function loadEnv() {
   // Match Vite's typical env file precedence:
@@ -29,6 +31,14 @@ const SUPABASE_SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").
 const supabaseAdmin = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
   ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } })
   : null;
+
+const VAPID_PUBLIC_KEY = (process.env.VAPID_PUBLIC_KEY || "").trim();
+const VAPID_PRIVATE_KEY = (process.env.VAPID_PRIVATE_KEY || "").trim();
+const VAPID_SUBJECT = (process.env.VAPID_SUBJECT || "mailto:admin@rccghopfan.org").trim();
+
+if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+  webPush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+}
 
 const require = createRequire(import.meta.url);
 const { getVerse } = require("@glowstudent/youversion");
@@ -118,6 +128,86 @@ async function startServer() {
       console.error("Error looking up bible verse:", error);
       return res.status(500).json({ error: "Failed to look up verse" });
     }
+  });
+
+  app.get("/api/admin/analytics", async (req, res) => {
+    const auth = await authenticateAdminRequest(req, res);
+    if (!auth) return;
+
+    const daysRaw = Number(req.query.days || 7);
+    const days = [7, 30, 90].includes(daysRaw) ? daysRaw : 7;
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
+    try {
+      const [viewsRes, downloadsRes, watchRes] = await Promise.all([
+        supabaseAdmin!
+          .from("content_activity")
+          .select("id,created_at")
+          .eq("action", "view")
+          .gte("created_at", since),
+        supabaseAdmin!
+          .from("content_downloads")
+          .select("id,created_at")
+          .gte("created_at", since),
+        supabaseAdmin!
+          .from("watch_progress")
+          .select("duration_seconds,completion_percentage,last_viewed_at")
+          .gte("last_viewed_at", since),
+      ]);
+
+      const firstError = viewsRes.error || downloadsRes.error || watchRes.error;
+      if (firstError) throw firstError;
+
+      res.json(buildAnalyticsPayload({
+        days,
+        views: viewsRes.data || [],
+        downloads: downloadsRes.data || [],
+        watchRows: watchRes.data || [],
+      }));
+    } catch (error) {
+      console.error("Error loading analytics:", error);
+      res.status(500).json({ error: "Failed to load analytics data" });
+    }
+  });
+
+  app.post("/api/admin/push/send", async (req, res) => {
+    const auth = await authenticateAdminRequest(req, res);
+    if (!auth) return;
+
+    if (!supabaseAdmin || !VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+      return res.status(500).json({ error: "Push notifications are not configured." });
+    }
+
+    const title = String(req.body?.title || "RCCG HOPFAN").trim();
+    const body = String(req.body?.body || req.body?.message || "").trim();
+    const url = String(req.body?.url || "/").trim();
+    const userId = typeof req.body?.user_id === "string" ? req.body.user_id.trim() : "";
+
+    if (!body) return res.status(400).json({ error: "Missing notification body." });
+
+    const query = supabaseAdmin.from("push_subscriptions").select("id,subscription");
+    const { data, error } = userId ? await query.eq("user_id", userId) : await query;
+    if (error) throw error;
+
+    const results = await Promise.allSettled((data || []).map((row: any) =>
+      webPush.sendNotification(row.subscription, JSON.stringify({ title, body, url })),
+    ));
+
+    const staleIds = results
+      .map((result, index) => ({ result, id: (data || [])[index]?.id }))
+      .filter(({ result }) => result.status === "rejected" && [404, 410].includes(Number((result as PromiseRejectedResult).reason?.statusCode)))
+      .map(({ id }) => id)
+      .filter(Boolean);
+
+    if (staleIds.length > 0) {
+      await supabaseAdmin.from("push_subscriptions").delete().in("id", staleIds);
+    }
+
+    res.json({
+      sent: results.filter((result) => result.status === "fulfilled").length,
+      failed: results.filter((result) => result.status === "rejected").length,
+      removed: staleIds.length,
+    });
   });
 
   async function authenticateAdminRequest(req: express.Request, res: express.Response) {
