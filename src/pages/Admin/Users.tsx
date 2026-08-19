@@ -32,14 +32,18 @@ export default function AdminUsers() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
-    fetchProfiles();
-  }, []);
-
-  useEffect(() => {
     async function fetchRole() {
       if (!user) return;
       const { data } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
-      setCurrentRole(((data as any)?.role as AdminRole) || 'member');
+      const role = ((data as any)?.role as AdminRole) || 'member';
+      setCurrentRole(role);
+      if (role === 'admin') {
+        fetchProfiles();
+      } else {
+        setProfiles([]);
+        setLoading(false);
+        setMessage({ type: 'error', text: 'Only admin can view users or change roles.' });
+      }
     }
     fetchRole();
   }, [user]);

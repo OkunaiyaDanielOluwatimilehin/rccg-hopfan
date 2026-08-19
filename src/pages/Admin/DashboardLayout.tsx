@@ -16,6 +16,11 @@ import {
   Bell,
   ListChecks,
   Search,
+  BarChart3,
+  ChevronsLeft,
+  ChevronsRight,
+  Menu,
+  X,
 } from 'lucide-react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
@@ -34,6 +39,8 @@ export default function AdminDashboard() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [notificationCount, setNotificationCount] = useState(0);
   const [navSearch, setNavSearch] = useState('');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [openSidebarGroups, setOpenSidebarGroups] = useState({
     core: true,
     requests: true,
@@ -49,7 +56,8 @@ export default function AdminDashboard() {
     { name: 'Events', path: '/admin/events', icon: CalendarDays, section: 'events' as const },
     { name: 'Testimonials', path: '/admin/testimonials', icon: MessageSquare, section: 'testimonials' as const },
     { name: 'Forms', path: '/admin/forms', icon: ListChecks, section: 'forms' as const },
-    { name: 'New Commers', path: '/admin/newcomers', icon: ClipboardList, section: 'newcomers' as const },
+    { name: 'Newcomer Form', path: '/admin/newcomers', icon: ClipboardList, section: 'newcomers' as const },
+    { name: 'Newcomer Responses', path: '/admin/newcomers/responses', icon: ListChecks, section: 'newcomers' as const },
   ];
 
   const settingsItems = [
@@ -61,6 +69,7 @@ export default function AdminDashboard() {
 
   const menuItems = [
     { name: 'Overview', path: '/admin', icon: LayoutDashboard, section: 'overview' as const },
+    { name: 'Analytics', path: '/admin/analytics', icon: BarChart3, section: 'analytics' as const },
     { name: 'Notifications', path: '/admin/notifications', icon: Bell, section: 'notifications' as const },
     { name: 'Users', path: '/admin/users', icon: Users, section: 'users' as const },
     { name: 'Prayer Requests', path: '/admin/prayer-requests', icon: MessageSquare, section: 'prayer_requests' as const },
@@ -74,6 +83,10 @@ export default function AdminDashboard() {
   const isActive = (path: string) =>
     currentLocation === path ||
     (path === '/admin/settings' && location.pathname.startsWith('/admin/settings'));
+
+  useEffect(() => {
+    setMobileSidebarOpen(false);
+  }, [location.pathname]);
 
   useEffect(() => {
     if (!loading) {
@@ -193,7 +206,7 @@ export default function AdminDashboard() {
   const visibleMenuItems = menuItems.filter((item) => canAccessSection(role, item.section, rolePermissions) && matchesNavSearch(item.name));
   const visibleContentItems = contentItems.filter((item) => canAccessSection(role, item.section, rolePermissions) && matchesNavSearch(item.name));
   const visibleSettingsItems = settingsItems.filter((item) => canAccessSection(role, item.section, rolePermissions) && matchesNavSearch(item.name));
-  const coreItems = visibleMenuItems.filter((item) => ['overview', 'notifications', 'users'].includes(item.section));
+  const coreItems = visibleMenuItems.filter((item) => ['overview', 'analytics', 'notifications', 'users'].includes(item.section));
   const requestItems = visibleMenuItems.filter((item) => ['prayer_requests', 'counseling_requests', 'follow_up'].includes(item.section));
   const departmentItems = visibleMenuItems.filter((item) => ['department_requests'].includes(item.section));
   const contentNavItems = visibleContentItems;
@@ -219,30 +232,57 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-stone-50 flex">
+      {mobileSidebarOpen ? (
+        <button
+          type="button"
+          className="fixed inset-0 z-50 bg-primary/40 md:hidden"
+          onClick={() => setMobileSidebarOpen(false)}
+          aria-label="Close admin menu"
+        />
+      ) : null}
       {/* Sidebar */}
-      <aside className="w-64 bg-gradient-to-b from-primary via-primary to-primary/90 border-r border-white/10 hidden md:flex flex-col sticky top-0 min-h-screen self-stretch">
-        <div className="p-6 border-b border-white/10">
+      <aside className={`admin-sidebar ${sidebarCollapsed ? 'admin-sidebar-collapsed md:w-20' : 'md:w-72'} fixed inset-y-0 left-0 z-[60] w-[18rem] -translate-x-full bg-primary border-r border-white/10 flex flex-col transition-all duration-300 md:sticky md:top-0 md:min-h-screen md:self-stretch md:translate-x-0 ${mobileSidebarOpen ? 'translate-x-0 shadow-2xl' : ''}`}>
+        {sidebarCollapsed ? (
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed(false)}
+            className="absolute -right-4 top-24 hidden h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-primary text-white shadow-lg md:inline-flex"
+            aria-label="Expand sidebar"
+            title="Expand sidebar"
+          >
+            <ChevronsRight className="h-5 w-5" />
+          </button>
+        ) : null}
+        <div className="border-b border-white/10 bg-white/[0.04] p-4 sm:p-6">
+          <div className="flex items-center justify-between gap-2">
           <Link to="/" className="flex items-center gap-3">
             <div className="w-10 h-10 bg-white border border-stone-200 flex items-center justify-center shadow-lg overflow-hidden">
               <img src="/Rccg_logo.png" alt="RCCG Logo" className="w-8 h-8 object-contain" referrerPolicy="no-referrer" />
             </div>
-            <span className="font-serif font-bold text-lg text-white tracking-tight">Admin Panel</span>
+            <span className="admin-sidebar-text font-serif font-bold text-lg text-white tracking-tight">Admin Panel</span>
           </Link>
+            <button type="button" onClick={() => setMobileSidebarOpen(false)} className="p-2 text-white/70 hover:text-white md:hidden" aria-label="Close menu">
+              <X className="h-5 w-5" />
+            </button>
+            <button type="button" onClick={() => setSidebarCollapsed((value) => !value)} className="hidden p-2 text-white/70 hover:text-white md:inline-flex" aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+              {sidebarCollapsed ? <ChevronsRight className="h-5 w-5" /> : <ChevronsLeft className="h-5 w-5" />}
+            </button>
+          </div>
           <Link
             to="/"
-            className="mt-4 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-stone-300 hover:text-white transition-colors"
+            className="admin-sidebar-text mt-4 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-stone-300 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-4 h-4" /> Back to Website
           </Link>
         </div>
 
         <nav className="flex-grow p-4 space-y-4 overflow-y-auto">
-          <label className="relative block">
+          <label className="admin-sidebar-text relative block">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
             <input
               value={navSearch}
               onChange={(e) => setNavSearch(e.target.value)}
-              className="w-full border border-white/10 bg-white/10 py-2.5 pl-10 pr-3 text-sm text-white placeholder:text-stone-400 outline-none focus:border-accent"
+              className="w-full rounded-full border border-white/10 bg-white/10 py-2.5 pl-10 pr-3 text-sm text-white placeholder:text-stone-400 outline-none focus:border-accent"
               placeholder="Search admin..."
             />
           </label>
@@ -253,7 +293,7 @@ export default function AdminDashboard() {
                 onClick={() => toggleSidebarGroup('core')}
                 className="w-full px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.3em] text-stone-400 flex items-center justify-between hover:text-stone-200 transition-colors"
               >
-                <span>Core</span>
+                <span className="admin-sidebar-group-label">Core</span>
                 <ChevronRight className={`w-3.5 h-3.5 transition-transform ${openSidebarGroups.core ? 'rotate-90' : ''}`} />
               </button>
               {openSidebarGroups.core
@@ -264,7 +304,8 @@ export default function AdminDashboard() {
                       <Link
                         key={item.path}
                         to={item.path}
-                        className={`flex items-center justify-between px-4 py-3 text-sm font-medium transition-all group ${
+                        title={item.name}
+                        className={`flex items-center justify-between rounded-xl px-4 py-3 text-sm font-medium transition-all group ${
                           active
                             ? 'bg-accent text-white shadow-lg shadow-accent/20'
                             : isNotifications && notificationCount > 0
@@ -289,7 +330,7 @@ export default function AdminDashboard() {
                               }`}
                             />
                           )}
-                          {item.name}
+                          <span className="admin-sidebar-text">{item.name}</span>
                         </div>
                         <span className="inline-flex items-center gap-2">
                           {isNotifications && notificationCount > 0 ? (
@@ -313,7 +354,7 @@ export default function AdminDashboard() {
                 onClick={() => toggleSidebarGroup('requests')}
                 className="w-full px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.3em] text-stone-400 flex items-center justify-between hover:text-stone-200 transition-colors"
               >
-                <span>Requests</span>
+                <span className="admin-sidebar-group-label">Requests</span>
                 <ChevronRight className={`w-3.5 h-3.5 transition-transform ${openSidebarGroups.requests ? 'rotate-90' : ''}`} />
               </button>
               {openSidebarGroups.requests
@@ -323,7 +364,8 @@ export default function AdminDashboard() {
                       <Link
                         key={item.path}
                         to={item.path}
-                        className={`flex items-center justify-between px-4 py-2.5 text-sm font-medium transition-all group ${
+                        title={item.name}
+                        className={`flex items-center justify-between rounded-xl px-4 py-2.5 text-sm font-medium transition-all group ${
                           active ? 'bg-white/10 text-white' : 'text-stone-300 hover:bg-white/10'
                         }`}
                       >
@@ -333,7 +375,7 @@ export default function AdminDashboard() {
                               active ? 'text-white' : 'text-stone-400 group-hover:text-white'
                             }`}
                           />
-                          <span className="text-sm">{item.name}</span>
+                          <span className="admin-sidebar-text text-sm">{item.name}</span>
                         </div>
                         {active && <ChevronRight className="w-4 h-4" />}
                       </Link>
@@ -350,7 +392,7 @@ export default function AdminDashboard() {
                 onClick={() => toggleSidebarGroup('department')}
                 className="w-full px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.3em] text-stone-400 flex items-center justify-between hover:text-stone-200 transition-colors"
               >
-                <span>Department Requests</span>
+                <span className="admin-sidebar-group-label">Department Requests</span>
                 <ChevronRight className={`w-3.5 h-3.5 transition-transform ${openSidebarGroups.department ? 'rotate-90' : ''}`} />
               </button>
               {openSidebarGroups.department
@@ -360,7 +402,8 @@ export default function AdminDashboard() {
                       <Link
                         key={item.path}
                         to={item.path}
-                        className={`flex items-center justify-between px-4 py-2.5 text-sm font-medium transition-all group ${
+                        title={item.name}
+                        className={`flex items-center justify-between rounded-xl px-4 py-2.5 text-sm font-medium transition-all group ${
                           active ? 'bg-white/10 text-white' : 'text-stone-300 hover:bg-white/10'
                         }`}
                       >
@@ -370,7 +413,7 @@ export default function AdminDashboard() {
                               active ? 'text-white' : 'text-stone-400 group-hover:text-white'
                             }`}
                           />
-                          <span className="text-sm">{item.name}</span>
+                          <span className="admin-sidebar-text text-sm">{item.name}</span>
                         </div>
                         {active && <ChevronRight className="w-4 h-4" />}
                       </Link>
@@ -387,7 +430,7 @@ export default function AdminDashboard() {
                 onClick={() => toggleSidebarGroup('content')}
                 className="w-full px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.3em] text-stone-400 flex items-center justify-between hover:text-stone-200 transition-colors"
               >
-                <span>Content</span>
+                <span className="admin-sidebar-group-label">Content</span>
                 <ChevronRight className={`w-3.5 h-3.5 transition-transform ${openSidebarGroups.content ? 'rotate-90' : ''}`} />
               </button>
               {openSidebarGroups.content
@@ -397,7 +440,8 @@ export default function AdminDashboard() {
                       <Link
                         key={item.path}
                         to={item.path}
-                        className={`flex items-center justify-between px-4 py-2.5 text-sm font-medium transition-all group ${
+                        title={item.name}
+                        className={`flex items-center justify-between rounded-xl px-4 py-2.5 text-sm font-medium transition-all group ${
                           active ? 'bg-white/10 text-white' : 'text-stone-300 hover:bg-white/10'
                         }`}
                       >
@@ -407,7 +451,7 @@ export default function AdminDashboard() {
                               active ? 'text-white' : 'text-stone-400 group-hover:text-white'
                             }`}
                           />
-                          <span className="text-sm">{item.name}</span>
+                          <span className="admin-sidebar-text text-sm">{item.name}</span>
                         </div>
                         {active && <ChevronRight className="w-4 h-4" />}
                       </Link>
@@ -424,7 +468,7 @@ export default function AdminDashboard() {
                 onClick={() => toggleSidebarGroup('settings')}
                 className="w-full px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.3em] text-stone-400 flex items-center justify-between hover:text-stone-200 transition-colors"
               >
-                <span>Settings</span>
+                <span className="admin-sidebar-group-label">Settings</span>
                 <ChevronRight className={`w-3.5 h-3.5 transition-transform ${openSidebarGroups.settings ? 'rotate-90' : ''}`} />
               </button>
               {openSidebarGroups.settings
@@ -434,11 +478,12 @@ export default function AdminDashboard() {
                       <Link
                         key={item.path}
                         to={item.path}
-                        className={`flex items-center justify-between px-4 py-2.5 text-sm font-medium transition-all group ${
+                        title={item.name}
+                        className={`flex items-center justify-between rounded-xl px-4 py-2.5 text-sm font-medium transition-all group ${
                           active ? 'bg-white/10 text-white' : 'text-stone-300 hover:bg-white/10'
                         }`}
                       >
-                        <span className="text-sm">{item.name}</span>
+                        <span className="admin-sidebar-text text-sm">{item.name}</span>
                         {active && <ChevronRight className="w-4 h-4" />}
                       </Link>
                     );
@@ -457,7 +502,7 @@ export default function AdminDashboard() {
                 <span>{user?.email?.[0].toUpperCase()}</span>
               )}
             </div>
-            <div className="flex-grow min-w-0">
+            <div className="admin-sidebar-text flex-grow min-w-0">
               <p className="text-xs font-bold truncate text-white">{user?.email}</p>
               <p className="text-[10px] text-accent uppercase tracking-wider">{role}</p>
             </div>
@@ -467,14 +512,21 @@ export default function AdminDashboard() {
             className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-stone-300 hover:bg-rose-500/10 hover:text-rose-200 transition-all group"
           >
             <LogOut className="w-5 h-5 text-stone-400 group-hover:text-rose-200" />
-            Logout
+            <span className="admin-sidebar-text">Logout</span>
           </button>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="admin-flat flex-grow w-full min-w-0 p-4 sm:p-6 max-w-6xl mx-auto pb-28 md:pb-8">
-        <div className="md:hidden mb-6">
+      <main className="admin-flat flex-grow w-full min-w-0 p-4 sm:p-6 max-w-[88rem] mx-auto pb-28 md:pb-8">
+        <div className="md:hidden mb-6 flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => setMobileSidebarOpen(true)}
+            className="inline-flex items-center gap-2 bg-primary px-4 py-3 text-xs font-bold uppercase tracking-widest text-white"
+          >
+            <Menu className="h-4 w-4" /> Menu
+          </button>
           <Link
             to="/"
             className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-stone-500 hover:text-primary transition-colors"

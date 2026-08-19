@@ -4,6 +4,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import ScrollToTop from './components/ScrollToTop';
 import Layout from './components/Layout';
 import SiteSettingsApplier from './components/SiteSettingsApplier';
+import { NotificationProvider } from './components/NotificationToasts';
 
 const Home = lazy(() => import('./pages/Home'));
 const About = lazy(() => import('./pages/About'));
@@ -41,6 +42,8 @@ const FormPage = lazy(() => import('./pages/FormPage'));
 const AdminForms = lazy(() => import('./pages/Admin/Forms'));
 const Newcomers = lazy(() => import('./pages/Newcomers'));
 const AdminNewcomers = lazy(() => import('./pages/Admin/Newcomers'));
+const AdminNewcomerResponses = lazy(() => import('./pages/Admin/NewcomerResponses'));
+const AdminAnalytics = lazy(() => import('./pages/Admin/Analytics'));
 
 function NewsRedirect() {
   const { slug } = useParams();
@@ -50,10 +53,11 @@ function NewsRedirect() {
 export default function App() {
   return (
     <AuthProvider>
-      <SiteSettingsApplier />
       <BrowserRouter>
-        <ScrollToTop />
-        <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-stone-50 text-stone-600">Loading...</div>}>
+        <NotificationProvider>
+          <SiteSettingsApplier />
+          <ScrollToTop />
+          <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-stone-50 text-stone-600">Loading...</div>}>
           <Routes>
             {/* Public Routes */}
             <Route path="/" element={<Layout />}>
@@ -94,8 +98,10 @@ export default function App() {
               <Route path="testimonials" element={<AdminTestimonials />} />
               <Route path="forms" element={<AdminForms />} />
               <Route path="newcomers" element={<AdminNewcomers />} />
+              <Route path="newcomers/responses" element={<AdminNewcomerResponses />} />
               <Route path="users" element={<AdminUsers />} />
               <Route path="notifications" element={<AdminNotifications />} />
+              <Route path="analytics" element={<AdminAnalytics />} />
               <Route path="prayer-requests" element={<AdminPrayerRequests />} />
               <Route path="counseling-requests" element={<AdminCounselingRequests />} />
               <Route path="follow-up" element={<AdminFollowUp />} />
@@ -109,7 +115,8 @@ export default function App() {
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-        </Suspense>
+          </Suspense>
+        </NotificationProvider>
       </BrowserRouter>
     </AuthProvider>
   );

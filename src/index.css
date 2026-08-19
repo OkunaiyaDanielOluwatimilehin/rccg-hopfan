@@ -62,4 +62,24 @@ body {
       box-shadow: none !important;
     }
   }
+
+  .admin-sidebar-collapsed .admin-sidebar-text,
+  .admin-sidebar-collapsed .admin-sidebar-group-label {
+    display: none !important;
+  }
+
+  .admin-sidebar-collapsed nav {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  .admin-sidebar-collapsed a,
+  .admin-sidebar-collapsed button {
+    justify-content: center;
+  }
+
+  .admin-sidebar-collapsed .admin-sidebar-text + svg,
+  .admin-sidebar-collapsed a > span:last-child {
+    display: none;
+  }
 }

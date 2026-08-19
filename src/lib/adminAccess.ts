@@ -10,6 +10,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
   'users',
   'settings',
   'notifications',
+  'analytics',
   'prayer_requests',
   'counseling_requests',
   'follow_up',
@@ -30,6 +31,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissions = {
     users: true,
     settings: true,
     notifications: true,
+    analytics: true,
     prayer_requests: true,
     counseling_requests: true,
     follow_up: true,
@@ -48,6 +50,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissions = {
     users: false,
     settings: false,
     notifications: true,
+    analytics: false,
     prayer_requests: false,
     counseling_requests: false,
     follow_up: false,
@@ -66,6 +69,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissions = {
     users: false,
     settings: false,
     notifications: true,
+    analytics: false,
     prayer_requests: true,
     counseling_requests: false,
     follow_up: false,
@@ -84,6 +88,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissions = {
     users: false,
     settings: false,
     notifications: true,
+    analytics: false,
     prayer_requests: false,
     counseling_requests: true,
     follow_up: false,
@@ -102,6 +107,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissions = {
     users: false,
     settings: false,
     notifications: true,
+    analytics: false,
     prayer_requests: false,
     counseling_requests: false,
     follow_up: true,
@@ -120,6 +126,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissions = {
     users: false,
     settings: false,
     notifications: true,
+    analytics: false,
     prayer_requests: false,
     counseling_requests: false,
     follow_up: false,
@@ -138,6 +145,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissions = {
     users: false,
     settings: false,
     notifications: false,
+    analytics: false,
     prayer_requests: false,
     counseling_requests: false,
     follow_up: false,
@@ -193,6 +201,7 @@ export function canAccessSection(
 ) {
   const normalizedRole = normalizeAdminRole(role);
   if (section === 'overview') return normalizedRole === 'admin';
+  if (section === 'users') return normalizedRole === 'admin';
   if (normalizedRole === 'admin') return true;
   const permissions = getRolePermissions(matrix);
   return Boolean(permissions[normalizedRole]?.[section]);
@@ -207,6 +216,7 @@ export function resolveAdminSection(pathname: string): AdminSection | null {
   if (pathname.startsWith('/admin/users')) return 'users';
   if (pathname.startsWith('/admin/settings')) return 'settings';
   if (pathname.startsWith('/admin/notifications')) return 'notifications';
+  if (pathname.startsWith('/admin/analytics')) return 'analytics';
   if (pathname.startsWith('/admin/prayer-requests')) return 'prayer_requests';
   if (pathname.startsWith('/admin/counseling-requests')) return 'counseling_requests';
   if (pathname.startsWith('/admin/follow-up')) return 'follow_up';
@@ -249,6 +259,8 @@ export function getFirstAllowedPath(role: AdminRole | string | null | undefined,
       return ROLE_LANDING_PATHS.admin;
     case 'notifications':
       return '/admin/notifications';
+    case 'analytics':
+      return '/admin/analytics';
     case 'posts':
       return ROLE_LANDING_PATHS.editorial;
     case 'prayer_requests':

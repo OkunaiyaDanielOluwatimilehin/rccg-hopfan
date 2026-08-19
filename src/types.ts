@@ -10,6 +10,7 @@ export type AdminSection =
   | 'users'
   | 'settings'
   | 'notifications'
+  | 'analytics'
   | 'prayer_requests'
   | 'counseling_requests'
   | 'follow_up'
@@ -194,6 +195,7 @@ export interface ContentDownload {
 }
 
 export interface SocialLink {
+  id?: string;
   label: string;
   url: string;
 }
@@ -265,6 +267,10 @@ export interface Newcomer {
   consent_newsletter_calls?: boolean;
   extra_fields?: Record<string, unknown>;
   status?: string;
+  assigned_follow_up_id?: string | null;
+  assigned_follow_up_name?: string | null;
+  assigned_at?: string | null;
+  archived_at?: string | null;
   notes?: string;
   created_at?: string;
 }

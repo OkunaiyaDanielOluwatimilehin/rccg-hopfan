@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Bell, Clock3, LogIn, LogOut, Menu, User, X } from 'lucide-react';
+import { Archive, Bell, CheckCircle2, Clock3, LogIn, LogOut, Menu, Trash2, User, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -22,6 +22,7 @@ export default function Navbar() {
     created_at: string;
     read_at: string | null;
     request_type: string | null;
+    archived_at?: string | null;
     href?: string;
     priority?: number;
   }>>([]);
@@ -90,8 +91,9 @@ export default function Navbar() {
           user
             ? supabase
                 .from('request_notifications')
-                .select('id,title,body,created_at,read_at,request_type')
+                .select('id,title,body,created_at,read_at,request_type,archived_at')
                 .eq('recipient_profile_id', user.id)
+                .is('archived_at', null)
                 .order('created_at', { ascending: false })
                 .limit(5)
             : Promise.resolve({ data: [], error: null } as any),
@@ -104,25 +106,22 @@ export default function Navbar() {
 
         const seenRaw = localStorage.getItem('hopfan_seen_content_notifications');
         const seen = new Set<string>(seenRaw ? JSON.parse(seenRaw) : []);
+        const archivedRaw = localStorage.getItem('hopfan_archived_content_notifications');
+        const archived = new Set<string>(archivedRaw ? JSON.parse(archivedRaw) : []);
+        const deletedRaw = localStorage.getItem('hopfan_deleted_content_notifications');
+        const deleted = new Set<string>(deletedRaw ? JSON.parse(deletedRaw) : []);
         const contentItems = [
           ...((eventsRes.data || []) as any[]).map((item) => ({ id: `event-${item.id}`, title: item.title, body: item.description || 'New event update', created_at: item.published_at || item.created_at || item.event_date, read_at: seen.has(`event-${item.id}`) ? item.created_at : null, request_type: 'content', href: `/events/${item.id}`, priority: 4 })),
           ...((sermonsRes.data || []) as any[]).map((item) => ({ id: `sermon-${item.id}`, title: item.title, body: item.description || 'New sermon uploaded', created_at: item.published_at || item.created_at || item.sermon_date, read_at: seen.has(`sermon-${item.id}`) ? item.created_at : null, request_type: 'content', href: `/sermons/${item.id}`, priority: 3 })),
           ...((devotionalsRes.data || []) as any[]).map((item) => ({ id: `devotional-${item.id}`, title: item.title, body: item.content || 'New devotional available', created_at: item.published_at || item.created_at, read_at: seen.has(`devotional-${item.id}`) ? item.created_at : null, request_type: 'content', href: '/devotionals', priority: 2 })),
           ...((postsRes.data || []) as any[]).map((item) => ({ id: `article-${item.id}`, title: item.title, body: item.summary || 'New article published', created_at: item.published_at || item.created_at, read_at: seen.has(`article-${item.id}`) ? item.created_at : null, request_type: 'content', href: `/editorial/${item.slug}`, priority: 1 })),
         ];
-        const merged = [...((requestRes.data || []) as any[]), ...contentItems]
+        const merged = [...((requestRes.data || []) as any[]), ...contentItems.filter((item) => !archived.has(item.id) && !deleted.has(item.id))]
           .sort((a, b) => (Number(b.priority || 0) - Number(a.priority || 0)) || new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .filter((item) => !item.archived_at)
           .slice(0, 8);
         setNotifications(merged);
 
-        const newest = merged.find((item) => !item.read_at && item.request_type === 'content');
-        if (newest && 'Notification' in window && Notification.permission === 'granted') {
-          new Notification(newest.title, { body: newest.body });
-        } else if (newest && 'Notification' in window && Notification.permission === 'default') {
-          Notification.requestPermission().then((permission) => {
-            if (permission === 'granted') new Notification(newest.title, { body: newest.body });
-          });
-        }
       } catch (error) {
         console.error('Error loading notifications:', error);
         setNotifications([]);
@@ -139,6 +138,7 @@ export default function Navbar() {
   const resolveNotificationPath = (requestType: string | null) => {
     if (requestType === 'counseling') return '/admin/counseling-requests';
     if (requestType === 'department') return '/admin/department-requests';
+    if (requestType === 'follow_up') return '/admin/follow-up';
     if (requestType === 'prayer') return '/admin/prayer-requests';
     const role = normalizeAdminRole(profileRole);
     return getFirstAllowedPath(role, null) || '/';
@@ -169,6 +169,70 @@ export default function Navbar() {
       navigate(resolveNotificationPath(notification.request_type));
     } catch (error) {
       console.error('Error opening notification:', error);
+    }
+  };
+
+  const markNotificationRead = async (notification: (typeof notifications)[number]) => {
+    const readAt = new Date().toISOString();
+    try {
+      if (notification.href) {
+        const seenRaw = localStorage.getItem('hopfan_seen_content_notifications');
+        const seen = new Set<string>(seenRaw ? JSON.parse(seenRaw) : []);
+        seen.add(notification.id);
+        localStorage.setItem('hopfan_seen_content_notifications', JSON.stringify(Array.from(seen).slice(-80)));
+      } else {
+        const { error } = await supabase
+          .from('request_notifications')
+          .update({ read_at: readAt })
+          .eq('id', notification.id)
+          .eq('recipient_profile_id', user?.id || '');
+        if (error) throw error;
+      }
+      setNotifications((current) => current.map((item) => (item.id === notification.id ? { ...item, read_at: item.read_at || readAt } : item)));
+    } catch (error) {
+      console.error('Error marking notification read:', error);
+    }
+  };
+
+  const archiveNotification = async (notification: (typeof notifications)[number]) => {
+    try {
+      if (notification.href) {
+        const archivedRaw = localStorage.getItem('hopfan_archived_content_notifications');
+        const archived = new Set<string>(archivedRaw ? JSON.parse(archivedRaw) : []);
+        archived.add(notification.id);
+        localStorage.setItem('hopfan_archived_content_notifications', JSON.stringify(Array.from(archived).slice(-120)));
+      } else {
+        const { error } = await supabase
+          .from('request_notifications')
+          .update({ archived_at: new Date().toISOString() })
+          .eq('id', notification.id)
+          .eq('recipient_profile_id', user?.id || '');
+        if (error) throw error;
+      }
+      setNotifications((current) => current.filter((item) => item.id !== notification.id));
+    } catch (error) {
+      console.error('Error archiving notification:', error);
+    }
+  };
+
+  const deleteNotification = async (notification: (typeof notifications)[number]) => {
+    try {
+      if (notification.href) {
+        const deletedRaw = localStorage.getItem('hopfan_deleted_content_notifications');
+        const deleted = new Set<string>(deletedRaw ? JSON.parse(deletedRaw) : []);
+        deleted.add(notification.id);
+        localStorage.setItem('hopfan_deleted_content_notifications', JSON.stringify(Array.from(deleted).slice(-120)));
+      } else {
+        const { error } = await supabase
+          .from('request_notifications')
+          .delete()
+          .eq('id', notification.id)
+          .eq('recipient_profile_id', user?.id || '');
+        if (error) throw error;
+      }
+      setNotifications((current) => current.filter((item) => item.id !== notification.id));
+    } catch (error) {
+      console.error('Error deleting notification:', error);
     }
   };
 
@@ -258,26 +322,42 @@ export default function Navbar() {
                             <div className="p-4 text-sm text-stone-500">No notifications yet.</div>
                           ) : (
                             notifications.map((notification) => (
-                              <button
+                              <div
                                 key={notification.id}
-                                type="button"
-                                onClick={() => handleNotificationClick(notification)}
-                                className={`w-full text-left px-4 py-3 border-t border-stone-100 hover:bg-stone-50 transition-colors ${notification.read_at ? 'bg-white' : 'bg-accent/5'}`}
+                                className={`border-t border-stone-100 px-4 py-3 transition-colors ${notification.read_at ? 'bg-white' : 'bg-accent/5'}`}
                               >
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="min-w-0">
+                                <button type="button" onClick={() => handleNotificationClick(notification)} className="w-full text-left">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
                                     <p className="text-sm font-semibold text-primary truncate">{notification.title}</p>
                                     <p className="mt-1 text-xs text-stone-500 line-clamp-2">{notification.body}</p>
                                     <p className="mt-2 text-[11px] text-stone-400 flex items-center gap-1">
                                       <Clock3 className="w-3 h-3" />
                                       {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
                                     </p>
+                                    </div>
+                                    <span className={`shrink-0 text-[10px] font-bold uppercase tracking-widest px-2 py-1 border ${notification.read_at ? 'border-stone-200 text-stone-500' : 'border-primary/20 text-primary bg-primary/5'}`}>
+                                      {notification.read_at ? 'Read' : 'New'}
+                                    </span>
                                   </div>
-                                  <span className={`shrink-0 text-[10px] font-bold uppercase tracking-widest px-2 py-1 border ${notification.read_at ? 'border-stone-200 text-stone-500' : 'border-primary/20 text-primary bg-primary/5'}`}>
-                                    {notification.read_at ? 'Read' : 'New'}
-                                  </span>
+                                </button>
+                                <div className="mt-3 flex items-center gap-2">
+                                  {!notification.read_at ? (
+                                    <button type="button" onClick={() => markNotificationRead(notification)} className="inline-flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-widest border border-stone-200 text-stone-600 hover:text-primary hover:border-stone-300">
+                                      <CheckCircle2 className="w-3 h-3" />
+                                      Read
+                                    </button>
+                                  ) : null}
+                                  <button type="button" onClick={() => archiveNotification(notification)} className="inline-flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-widest border border-stone-200 text-stone-600 hover:text-primary hover:border-stone-300">
+                                    <Archive className="w-3 h-3" />
+                                    Archive
+                                  </button>
+                                  <button type="button" onClick={() => deleteNotification(notification)} className="inline-flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-widest border border-rose-200 text-rose-600 hover:bg-rose-50">
+                                    <Trash2 className="w-3 h-3" />
+                                    Delete
+                                  </button>
                                 </div>
-                              </button>
+                              </div>
                             ))
                           )}
                         </div>

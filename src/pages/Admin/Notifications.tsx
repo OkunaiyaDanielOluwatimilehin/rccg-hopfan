@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Bell, CheckCircle2, Clock3, Loader2, Mail, ShieldAlert, Sparkles } from 'lucide-react';
+import { Archive, Bell, CheckCircle2, Clock3, Loader2, Mail, ShieldAlert, Sparkles, Trash2 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
@@ -18,6 +18,7 @@ type RequestNotification = {
   body: string;
   created_at: string;
   read_at: string | null;
+  archived_at?: string | null;
   metadata: Record<string, unknown> | null;
 };
 
@@ -67,6 +68,7 @@ const REQUEST_PATHS: Record<string, string> = {
   prayer: '/admin/prayer-requests',
   counseling: '/admin/counseling-requests',
   department: '/admin/department-requests',
+  follow_up: '/admin/follow-up',
 };
 
 const ACTIVITY_PATHS: Record<string, string> = {
@@ -102,8 +104,9 @@ export default function AdminNotifications() {
           supabase.from('profiles').select('id,role').eq('id', user.id).maybeSingle(),
           supabase
             .from('request_notifications')
-            .select('id,request_type,title,body,created_at,read_at,metadata')
+            .select('id,request_type,title,body,created_at,read_at,archived_at,metadata')
             .eq('recipient_profile_id', user.id)
+            .is('archived_at', null)
             .order('created_at', { ascending: false }),
           supabase
             .from('admin_activity_logs')
@@ -187,6 +190,41 @@ export default function AdminNotifications() {
     } catch (markError: any) {
       console.error('Error marking notification read:', markError);
       setError(markError?.message || 'Could not mark this notification as read.');
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const archiveNotification = async (id: string) => {
+    setSavingId(id);
+    try {
+      const { error: updateError } = await supabase
+        .from('request_notifications')
+        .update({ archived_at: new Date().toISOString() })
+        .eq('id', id);
+      if (updateError) throw updateError;
+      setRequests((current) => current.filter((item) => item.id !== id));
+    } catch (archiveError: any) {
+      console.error('Error archiving notification:', archiveError);
+      setError(archiveError?.message || 'Could not archive this notification.');
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const deleteNotification = async (id: string) => {
+    if (!window.confirm('Delete this notification?')) return;
+    setSavingId(id);
+    try {
+      const { error: deleteError } = await supabase
+        .from('request_notifications')
+        .delete()
+        .eq('id', id);
+      if (deleteError) throw deleteError;
+      setRequests((current) => current.filter((item) => item.id !== id));
+    } catch (deleteError: any) {
+      console.error('Error deleting notification:', deleteError);
+      setError(deleteError?.message || 'Could not delete this notification.');
     } finally {
       setSavingId(null);
     }
@@ -306,6 +344,28 @@ export default function AdminNotifications() {
                         <CheckCircle2 className="w-3.5 h-3.5" />
                         Mark Read
                       </button>
+                    ) : null}
+                    {item.source === 'request' ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => archiveNotification(item.key.replace('request:', ''))}
+                          disabled={savingId === item.key.replace('request:', '')}
+                          className="inline-flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-widest border border-stone-200 text-stone-600 hover:text-primary hover:border-stone-300 disabled:opacity-50"
+                        >
+                          <Archive className="w-3.5 h-3.5" />
+                          Archive
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteNotification(item.key.replace('request:', ''))}
+                          disabled={savingId === item.key.replace('request:', '')}
+                          className="inline-flex items-center gap-2 px-3 py-2 text-[10px] font-bold uppercase tracking-widest border border-rose-200 text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Delete
+                        </button>
+                      </>
                     ) : null}
                   </div>
                 </div>

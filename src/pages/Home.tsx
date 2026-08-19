@@ -8,42 +8,39 @@ import Modal from '../components/Modal';
 import { supabase } from '../lib/supabase';
 import MarkdownContent from '../components/MarkdownContent';
 import Seo from '../components/Seo';
-import { useAuth } from '../contexts/AuthContext';
 
 function formatHeroTitle(title: string) {
   return title
-    .replace(/WELCOME TO\s+RCCG\s+HOUSE OF PRAYERS?\s+FOR ALL NATIONS\.?/i, 'WELCOME TO RCCG HOUSE OF\nPRAYER FOR ALL NATIONS.')
-    .replace(/WELCOME TO\s+HOUSE OF PRAYERS?\s+FOR ALL NATIONS\.?/i, 'WELCOME TO HOUSE OF\nPRAYER FOR ALL NATIONS.')
-    .replace(/RCCG\s+HOUSE OF PRAYERS?\s+FOR ALL NATIONS\.?/i, 'RCCG HOUSE OF\nPRAYER FOR ALL NATIONS.')
+    .replace(/WELCOME TO\s+RCCG\s+HOUSE\s+OF\s+PRAYERS?\s+FOR ALL NATIONS\.?/i, 'WELCOME TO RCCG HOUSE\nOF PRAYER FOR ALL NATIONS.')
+    .replace(/WELCOME TO\s+HOUSE\s+OF\s+PRAYERS?\s+FOR ALL NATIONS\.?/i, 'WELCOME TO RCCG HOUSE\nOF PRAYER FOR ALL NATIONS.')
+    .replace(/RCCG\s+HOUSE\s+OF\s+PRAYERS?\s+FOR ALL NATIONS\.?/i, 'WELCOME TO RCCG HOUSE\nOF PRAYER FOR ALL NATIONS.')
     .trim();
 }
 
 function renderHeroTitle(title: string) {
-  const formatted = formatHeroTitle(title);
-  const [firstLine, ...rest] = formatted.split('\n').map((part) => part.trim()).filter(Boolean);
-  const remaining = rest.join(' ');
-
-  if (/^welcome to/i.test(firstLine || '')) {
-    const body = remaining || firstLine.replace(/^welcome to\s*/i, '');
-    const bodyParts = body.split(/\s+/);
-    const bottomLine = bodyParts.slice(3).join(' ');
-
-    return (
-      <>
-        <span className="block text-xs sm:text-sm md:text-base font-bold uppercase tracking-[0.45em] text-accent/90 mb-4">
-          Welcome to
-        </span>
-        <span className="block">RCCG House of</span>
-        <span className="block text-accent">{bottomLine ? `Prayer for All Nations.` : body}</span>
-      </>
-    );
-  }
-
+  const formatted = 'WELCOME TO RCCG HOUSE\nOF PRAYER FOR ALL NATIONS.';
   return formatted.split('\n').map((line, index) => (
-    <span key={`${line}-${index}`} className={`block ${index === 1 ? 'text-accent' : ''}`}>
+    <motion.span
+      key={`${line}-${index}`}
+      className={`block ${index === 1 ? 'mt-2 text-accent' : 'text-white'}`}
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.12, duration: 0.65, ease: 'easeOut' }}
+    >
       {line}
-    </span>
+    </motion.span>
   ));
+}
+
+function renderHeroSubtitle(subtitle: string) {
+  return subtitle
+    .replace(/faith,\s*fellowship/i, 'faith,\nfellowship')
+    .split('\n')
+    .map((line, index) => (
+      <span key={`${line}-${index}`} className="block">
+        {line}
+      </span>
+    ));
 }
 
 function resolveLiveEmbedUrl(url?: string | null) {
@@ -82,11 +79,6 @@ export default function Home() {
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
   const [events, setEvents] = useState<ChurchEvent[]>([]);
   const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
-  const [birthdayName, setBirthdayName] = useState('');
-  const [birthdayActive, setBirthdayActive] = useState(false);
-  const [birthdayVisible, setBirthdayVisible] = useState(false);
-  const [birthdaySlide, setBirthdaySlide] = useState<1 | 2>(1);
-  const { user } = useAuth();
 
   useEffect(() => {
     async function fetchAllData() {
@@ -144,43 +136,8 @@ export default function Home() {
     fetchAllData();
   }, []);
 
-  useEffect(() => {
-    async function loadBirthday() {
-      if (!user) {
-        setBirthdayActive(false);
-        return;
-      }
-      const today = new Date();
-      const { data } = await supabase
-        .from('profiles')
-        .select('full_name,birth_month,birth_day')
-        .eq('id', user.id)
-        .maybeSingle();
-      const isToday = Number((data as any)?.birth_month) === today.getMonth() + 1 && Number((data as any)?.birth_day) === today.getDate();
-      setBirthdayActive(isToday);
-      setBirthdayName((data as any)?.full_name || String(user.email || 'friend').split('@')[0]);
-    }
-    loadBirthday();
-  }, [user?.id, user]);
-
-  useEffect(() => {
-    if (!birthdayActive) {
-      setBirthdayVisible(false);
-      return;
-    }
-    setBirthdaySlide(1);
-    setBirthdayVisible(true);
-    const slideTimer = window.setTimeout(() => setBirthdaySlide(2), 3400);
-    const hideTimer = window.setTimeout(() => setBirthdayVisible(false), 7200);
-    return () => {
-      window.clearTimeout(slideTimer);
-      window.clearTimeout(hideTimer);
-    };
-  }, [birthdayActive]);
-
-
   // Default values if settings are not yet in DB
-  const heroTitle = settings?.hero_title || '';
+  const heroTitle = 'WELCOME TO RCCG HOUSE\nOF PRAYER FOR ALL NATIONS.';
   const heroSubtitle = settings?.hero_subtitle || '';
   const heroPrimaryImage = settings?.hero_image_url || '';
   const liveEmbedUrl = resolveLiveEmbedUrl(settings?.live_embed_url);
@@ -467,79 +424,55 @@ export default function Home() {
         image={heroImages[0] || heroPrimaryImage || '/Rccg_logo.png'}
         path="/"
       />
-      {birthdayVisible ? (
-        <div className="pointer-events-none fixed inset-0 z-[60] overflow-hidden" aria-hidden="true">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={birthdaySlide}
-              initial={{ opacity: 0, x: 80 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -80 }}
-              transition={{ duration: 0.55, ease: 'easeOut' }}
-              className="absolute left-1/2 top-24 w-[min(92vw,30rem)] -translate-x-1/2 bg-white/95 border border-accent/30 px-6 py-5 shadow-2xl text-center"
-            >
-              {birthdaySlide === 1 ? (
-                <>
-                  <p className="text-xs font-bold uppercase tracking-[0.3em] text-accent">Birthday Blessings</p>
-                  <p className="mt-1 text-2xl sm:text-3xl font-serif font-bold text-primary">Happy birthday, {birthdayName}</p>
-                </>
-              ) : (
-                <>
-                  <p className="text-xs font-bold uppercase tracking-[0.3em] text-accent">From RCCG HOPFAN</p>
-                  <p className="mt-1 text-xl sm:text-2xl font-serif font-bold text-primary">Joy, strength, and fresh grace today.</p>
-                </>
-              )}
-            </motion.div>
-          </AnimatePresence>
-          {Array.from({ length: 36 }, (_, index) => (
-            <div key={`confetti-${index}`} className="absolute top-[-2rem] h-3 w-2 animate-[home-confetti-fall_3.2s_linear_forwards]" style={{ left: `${(index * 19) % 100}%`, animationDelay: `${(index % 12) * 0.12}s`, transform: `rotate(${index * 17}deg)`, background: ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#a855f7', '#ec4899'][index % 6] }} />
-          ))}
-          {Array.from({ length: 22 }, (_, index) => (
-            <div key={index} className="absolute bottom-[-6rem] w-9 h-12 rounded-full opacity-80 animate-[home-birthday-float_6.8s_ease-in_forwards]" style={{ left: `${(index * 13) % 100}%`, animationDelay: `${(index % 11) * 0.22}s`, background: ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#a855f7', '#ec4899'][index % 6] }}>
-              <span className="absolute left-1/2 top-full h-12 w-px bg-stone-500/35" />
-            </div>
-          ))}
-          <style>{`@keyframes home-birthday-float{0%{transform:translateY(0) translateX(0) scale(.82);opacity:.85}85%{opacity:.85}100%{transform:translateY(-118vh) translateX(34px) scale(1.08);opacity:0}}@keyframes home-confetti-fall{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(105vh) rotate(720deg);opacity:0}}`}</style>
-        </div>
-      ) : null}
       {/* Hero Section */}
-      <section className="relative h-[90vh] flex items-center justify-start overflow-hidden bg-primary">
+      <section className="relative mt-4 flex min-h-fit items-center justify-start overflow-hidden bg-primary sm:mt-6">
         {heroImages.length > 0 && (
           <AnimatePresence mode="wait">
             <motion.img
               key={heroImages[heroIndex]}
-              initial={{ opacity: 0, scale: 1.05 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 1.02 }}
-              transition={{ duration: 1.5, ease: 'easeInOut' }}
+              initial={{ opacity: 0, scale: 1.08 }}
+              animate={{ opacity: 0.42, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.03 }}
+              transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
               src={heroImages[heroIndex]}
               alt="Hero"
-              className="absolute inset-0 w-full h-full object-cover opacity-40"
+              className="absolute inset-0 w-full h-full object-cover"
               referrerPolicy="no-referrer"
             />
           </AnimatePresence>
         )}
-        <div className="absolute inset-0 bg-gradient-to-r from-primary via-primary/70 to-transparent" />
-        <div className="relative z-10 w-full px-8 md:px-16 pt-12 sm:pt-14 md:pt-16 pb-20 sm:pb-24 md:pb-28">
+        <motion.div
+          className="absolute inset-0 bg-gradient-to-r from-primary via-primary/72 to-primary/10"
+          initial={{ opacity: 0.78 }}
+          animate={{ opacity: [0.78, 0.92, 0.82] }}
+          transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
+        />
+        <motion.div
+          className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-primary/80 to-transparent"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 1.2, ease: 'easeOut' }}
+        />
+        <div className="relative z-10 w-full px-6 sm:px-8 md:px-16 pt-20 sm:pt-24 md:pt-28 lg:pt-32 pb-16 sm:pb-20 md:pb-24 lg:pb-28">
           <div className="max-w-4xl text-left">
           {heroTitle && (
             <motion.h1
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, ease: 'easeOut' }}
-              className="font-display text-3xl sm:text-4xl md:text-6xl lg:text-7xl text-white font-bold mb-6 tracking-tight leading-[0.98] max-w-[15ch] drop-shadow-[0_8px_30px_rgba(0,0,0,0.35)]"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.4, ease: 'easeOut' }}
+              className="font-display max-w-[17ch] text-[2rem] sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl text-white font-black mb-7 leading-[1.02] tracking-normal drop-shadow-[0_10px_34px_rgba(0,0,0,0.45)]"
             >
               {renderHeroTitle(heroTitle)}
             </motion.h1>
           )}
           {heroSubtitle && (
             <motion.p
-              initial={{ opacity: 0, y: 30 }}
+              initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              className="text-base sm:text-lg md:text-xl lg:text-2xl text-stone-200 mb-10 max-w-2xl font-light leading-relaxed"
+              transition={{ delay: 0.65, duration: 0.7, ease: 'easeOut' }}
+              className="text-xl sm:text-2xl md:text-3xl lg:text-4xl text-white mb-10 max-w-4xl font-extrabold leading-tight drop-shadow-[0_4px_18px_rgba(0,0,0,0.4)]"
             >
-              {heroSubtitle}
+              {renderHeroSubtitle(heroSubtitle)}
             </motion.p>
           )}
           </div>

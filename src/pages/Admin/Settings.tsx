@@ -72,12 +72,18 @@ function normalizeGivingAccounts(accounts: GivingAccount[]) {
 function readSocialLinks(settings: SiteSettings | null) {
   return Array.isArray((settings as any)?.social_links)
     ? ((settings as any).social_links as any[])
-        .map((link) => ({ label: String(link?.label || '').trim(), url: String(link?.url || '').trim() }))
+        .map((link, index) => {
+          const label = String(link?.label || '').trim();
+          const url = String(link?.url || '').trim();
+          return { id: String(link?.id || `social-${index}-${label}-${url}`), label, url };
+        })
     : [];
 }
 
 function normalizeSocialLinks(settings: SiteSettings | null) {
-  return readSocialLinks(settings).filter((link) => link.label && link.url);
+  return readSocialLinks(settings)
+    .filter((link) => link.label && link.url)
+    .map((link) => ({ id: link.id, label: link.label, url: link.url }));
 }
 
 const PAGE_HEADER_LABELS = [
@@ -495,7 +501,7 @@ export default function AdminSettings() {
   const handleAddSocialLink = () => {
     setSettings(prev => {
       if (!prev) return null;
-      return { ...prev, social_links: [...readSocialLinks(prev), { label: '', url: '' }] } as any;
+      return { ...prev, social_links: [...readSocialLinks(prev), { id: `social-${Date.now()}`, label: '', url: '' }] } as any;
     });
   };
 
@@ -2192,7 +2198,7 @@ export default function AdminSettings() {
         {socialLinks.length === 0 ? <p className="text-sm text-stone-500 border border-dashed border-stone-200 bg-stone-50 p-5">No social links yet.</p> : null}
         <div className="space-y-3">
           {socialLinks.map((link, index) => (
-            <div key={index} className="grid gap-3 sm:grid-cols-[12rem_1fr_auto]">
+            <div key={link.id || index} className="grid gap-3 sm:grid-cols-[12rem_1fr_auto]">
               <input value={link.label} onChange={(e) => handleUpdateSocialLink(index, 'label', e.target.value)} className="border border-stone-200 p-3 outline-none" placeholder="Instagram" />
               <input value={link.url} onChange={(e) => handleUpdateSocialLink(index, 'url', e.target.value)} className="border border-stone-200 p-3 outline-none" placeholder="https://..." />
               <button type="button" onClick={() => handleDeleteSocialLink(index)} className="px-4 py-3 text-rose-700 font-bold">
