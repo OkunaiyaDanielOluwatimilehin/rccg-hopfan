@@ -14,16 +14,18 @@ const tableByType = {
   devotional: 'devotionals',
 } as const;
 
-export default async function handler(req: any, res: any) {
+export function createContentShareHandler(forcedType?: ShareContentType) {
+  return async function handler(req: any, res: any) {
   if (req.method && req.method !== 'GET' && req.method !== 'HEAD') return res.status(405).send('Method not allowed.');
   if (!supabase) return res.status(500).send('Share previews are not configured.');
 
-  const typeValue = req.params?.type ?? req.query?.type;
+  const typeValue = forcedType ?? req.params?.type ?? req.query?.type;
   const keyValue = req.params?.key ?? req.query?.key;
   const type = String(Array.isArray(typeValue) ? typeValue[0] : typeValue) as ShareContentType;
   const key = String(Array.isArray(keyValue) ? keyValue[0] : keyValue);
-  if (!(type in tableByType)) return res.status(404).send('Content not found.');
-  const id = key.match(/--([^/]+)$/)?.[1];
+  if (!Object.hasOwn(tableByType, type)) return res.status(404).send('Content not found.');
+  const id = key.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i)?.[1]
+    || key.match(/--([^/]+)$/)?.[1];
   if (!id) return res.status(404).send('Content not found.');
 
   const table = tableByType[type];
@@ -55,8 +57,11 @@ export default async function handler(req: any, res: any) {
   const image = type === 'article' ? row.image_url : type === 'sermon' ? row.thumbnail_url : row.image_url;
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
+  res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120');
   const version = String(req.query?.v || '');
   const sharePath = `/${type}/${key}${version ? `?v=${encodeURIComponent(version)}` : ''}`;
   return res.status(200).send(renderContentShareHtml({ id: row.id, title, description, image, destination, type }, origin, sharePath, version));
+  };
 }
+
+export default createContentShareHandler();
