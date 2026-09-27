@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Copy, Download, Eye, Image as ImageIcon, Palette, Plus, Save, Share2, Trash2, X } from 'lucide-react';
+import { Copy, Download, Eye, Loader2, Palette, Plus, Save, Share2, Trash2, Upload, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { CustomForm, CustomFormEntry, CustomFormField, CustomFormFieldType, FormColorAssignment } from '../../types';
+import { uploadToSupabasePublicBucket } from '../../services/uploadService';
 
 const fieldTypes: CustomFormFieldType[] = ['short_text', 'long_text', 'email', 'phone', 'number', 'date', 'select', 'checkbox'];
 
@@ -42,6 +43,7 @@ export default function AdminForms() {
   const [activeEntries, setActiveEntries] = useState<CustomFormEntry[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploadingHeader, setUploadingHeader] = useState(false);
   const [sharedFormId, setSharedFormId] = useState<string | null>(null);
   const active = forms.find((form) => form.id === activeId) || null;
 
@@ -85,6 +87,38 @@ export default function AdminForms() {
 
   function patchActive(patch: Partial<CustomForm>) {
     setForms((prev) => prev.map((form) => (form.id === active?.id ? { ...form, ...patch } : form)));
+  }
+
+  async function uploadHeaderImage(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file || !active) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Choose an image file.');
+      event.target.value = '';
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      alert('Image must be 10 MB or smaller.');
+      event.target.value = '';
+      return;
+    }
+
+    setUploadingHeader(true);
+    try {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const imageUrl = await uploadToSupabasePublicBucket({
+        bucket: 'site-images',
+        objectPath: `forms/${Date.now()}-${safeName}`,
+        file,
+      });
+      patchActive({ header_image_url: imageUrl });
+    } catch (error) {
+      console.error('Form header image upload failed:', error);
+      alert('Could not upload header image.');
+    } finally {
+      setUploadingHeader(false);
+      event.target.value = '';
+    }
   }
 
   function patchField(fieldId: string, patch: Partial<CustomFormField>) {
@@ -348,13 +382,15 @@ export default function AdminForms() {
                 <h2 className="font-bold text-primary">Design</h2>
               </div>
               <div className="grid gap-3 lg:grid-cols-[1fr_8rem_8rem_8rem]">
-                <label className="space-y-2">
-                  <span className="text-xs font-bold uppercase tracking-widest text-stone-500">Header Image URL</span>
-                  <div className="relative">
-                    <ImageIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
-                    <input value={active.header_image_url || ''} onChange={(e) => patchActive({ header_image_url: e.target.value })} className="w-full border border-stone-200 bg-white py-3 pl-10 pr-3 outline-none" placeholder="https://..." />
-                  </div>
-                </label>
+                <div className="space-y-2">
+                  <span className="block text-xs font-bold uppercase tracking-widest text-stone-500">Header image</span>
+                  <label className="inline-flex min-h-12 cursor-pointer items-center gap-2 border border-stone-200 bg-white px-4 py-3 text-sm font-bold text-primary hover:border-accent">
+                    {uploadingHeader ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                    {uploadingHeader ? 'Uploading...' : 'Upload image'}
+                    <input type="file" accept="image/*" onChange={uploadHeaderImage} disabled={uploadingHeader} className="sr-only" />
+                  </label>
+                  <input value={active.header_image_url || ''} onChange={(e) => patchActive({ header_image_url: e.target.value })} className="w-full border border-stone-200 bg-white px-3 py-3 outline-none" placeholder="Or paste image URL" aria-label="Header image URL" />
+                </div>
                 <label className="space-y-2">
                   <span className="text-xs font-bold uppercase tracking-widest text-stone-500">Theme</span>
                   <input type="color" value={active.theme_color || '#173b2f'} onChange={(e) => patchActive({ theme_color: e.target.value })} className="h-12 w-full border border-stone-200 bg-white p-1" />

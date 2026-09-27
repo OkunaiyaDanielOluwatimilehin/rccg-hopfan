@@ -171,7 +171,7 @@ async function main() {
     siteSettings?.hero_subtitle ||
     'RCCG HOPFAN is a Christ-centered church community sharing sermons, events, devotionals, gallery highlights, and editorial articles.';
 
-  const visibleEvents = events.filter((event) => isPublishedNow(event.published_at));
+  const visibleEvents = events.filter((event) => event.status !== 'draft' && isPublishedNow(event.published_at));
   const visiblePosts = posts.filter((post) => post.status === 'published' && isPublishedNow(post.published_at));
   const visibleSermons = sermons.filter((sermon) => isVisibleSermon(sermon));
   const visibleDevotionals = devotionals.filter((devotional) => isPublishedNow(devotional.published_at));
