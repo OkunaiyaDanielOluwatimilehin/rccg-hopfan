@@ -17,7 +17,7 @@ const EventDetail: React.FC = () => {
   const [formLoading, setFormLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [interestedOpen, setInterestedOpen] = useState(false);
-  const shareUrl = useMemo(() => event ? buildShareUrl('event', event.title, event.id) : '', [event]);
+  const shareUrl = useMemo(() => event ? buildShareUrl('event', event.title, event.id, undefined, event.image_url) : '', [event]);
 
   useEffect(() => {
     const fetchEvent = async () => {
@@ -257,13 +257,16 @@ const EventDetail: React.FC = () => {
                     <Link
                       key={item.id}
                       to={`/events/${item.id}`}
-                      className="block border border-stone-100 bg-stone-50/50 hover:bg-white hover:border-accent/30 transition-all p-4"
+                      className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)] items-center gap-3 border border-stone-100 bg-stone-50/50 p-3 transition-all hover:border-accent/30 hover:bg-white sm:grid-cols-1 sm:gap-0 sm:p-4"
                     >
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-accent mb-2">
-                        {format(new Date(item.event_date), 'MMM d, yyyy')}
-                      </p>
-                      <h5 className="font-serif font-bold text-primary text-lg leading-tight line-clamp-2">{item.title}</h5>
-                      <p className="text-sm text-stone-500 mt-2 line-clamp-2">{item.location}</p>
+                      <img src={item.image_url || 'https://images.unsplash.com/photo-1438029071396-1e831a7fa6d8?auto=format&fit=crop&q=80'} alt="" className="h-20 w-20 object-cover sm:mb-3 sm:aspect-video sm:h-auto sm:w-full" referrerPolicy="no-referrer" />
+                      <div className="min-w-0">
+                        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-accent sm:mb-2">
+                          {format(new Date(item.event_date), 'MMM d, yyyy')}
+                        </p>
+                        <h5 className="break-words text-base font-serif font-bold leading-tight text-primary line-clamp-2 sm:text-lg">{item.title}</h5>
+                        <p className="mt-1 text-sm text-stone-500 line-clamp-1 sm:mt-2 sm:line-clamp-2">{item.location}</p>
+                      </div>
                     </Link>
                   ))}
                 </div>

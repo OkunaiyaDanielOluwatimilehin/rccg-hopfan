@@ -13,7 +13,7 @@ const PAGE_SIZE = 6;
 
 function shareEvent(event: ChurchEvent) {
   const text = `${event.title} - ${format(new Date(event.event_date), 'MMMM d, yyyy')}`;
-  const url = buildShareUrl('event', event.title, event.id);
+  const url = buildShareUrl('event', event.title, event.id, undefined, event.image_url);
 
   if (navigator.share) {
     navigator.share({ title: event.title, text, url }).catch(() => {});

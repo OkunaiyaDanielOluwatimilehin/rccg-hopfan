@@ -56,5 +56,7 @@ export default async function handler(req: any, res: any) {
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
-  return res.status(200).send(renderContentShareHtml({ id: row.id, title, description, image, destination, type }, origin, `/${type}/${key}`));
+  const version = String(req.query?.v || '');
+  const sharePath = `/${type}/${key}${version ? `?v=${encodeURIComponent(version)}` : ''}`;
+  return res.status(200).send(renderContentShareHtml({ id: row.id, title, description, image, destination, type }, origin, sharePath, version));
 }

@@ -59,7 +59,7 @@ export default function SermonDetail() {
   const { user } = useAuth();
   const videoEmbedUrl = useMemo(() => resolveVideoEmbedUrl(sermon?.video_url), [sermon?.video_url]);
 
-  const shareUrl = sermon ? buildShareUrl('sermon', sermon.title, sermon.id) : '';
+  const shareUrl = sermon ? buildShareUrl('sermon', sermon.title, sermon.id, undefined, sermon.thumbnail_url) : '';
   const availableTabs = useMemo(
     () =>
       [
@@ -971,7 +971,7 @@ export default function SermonDetail() {
                     </div>
 
                     {relatedSermons.length > 0 ? (
-                      <div className="grid grid-cols-3 md:grid-cols-6 gap-3 sm:gap-4">
+                      <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-3 sm:gap-4">
                         {relatedSermons.map((item) => (
                           <Link
                             key={item.id}
@@ -986,19 +986,19 @@ export default function SermonDetail() {
                                 referrerPolicy="no-referrer"
                               />
                             </div>
-                            <div className="p-4 space-y-2">
-                              <h4 className="text-lg font-serif font-bold text-primary group-hover:text-accent transition-colors line-clamp-2">
+                            <div className="min-w-0 space-y-2 p-3 sm:p-4">
+                              <h4 className="break-words text-base font-serif font-bold text-primary transition-colors line-clamp-2 group-hover:text-accent sm:text-lg">
                                 {item.title}
                               </h4>
                               <div className="flex flex-wrap gap-2 text-[10px] font-bold uppercase tracking-widest">
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-stone-200 text-stone-600">
+                                <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 truncate border border-stone-200 bg-white px-2 py-1 text-stone-600 sm:px-2.5">
                                   <UserRound className="w-3.5 h-3.5 text-accent" />
-                                  {item.speaker_name}
+                                  <span className="truncate">{item.speaker_name}</span>
                                 </span>
                                 {item.category ? (
-                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-stone-200 text-stone-600">
+                                  <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 truncate border border-stone-200 bg-white px-2 py-1 text-stone-600 sm:px-2.5">
                                     <Tag className="w-3.5 h-3.5 text-accent" />
-                                    {item.category}
+                                    <span className="truncate">{item.category}</span>
                                   </span>
                                 ) : null}
                               </div>

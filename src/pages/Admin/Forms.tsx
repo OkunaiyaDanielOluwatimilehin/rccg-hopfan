@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Copy, Download, Eye, Loader2, Palette, Plus, Save, Share2, Trash2, Upload, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, Download, Eye, Loader2, Palette, Plus, Save, Share2, Trash2, Upload, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { CustomForm, CustomFormEntry, CustomFormField, CustomFormFieldType, FormColorAssignment } from '../../types';
 import { uploadToSupabasePublicBucket } from '../../services/uploadService';
 
 const fieldTypes: CustomFormFieldType[] = ['short_text', 'long_text', 'email', 'phone', 'number', 'date', 'select', 'checkbox'];
+const ENTRY_PAGE_SIZE = 25;
 
 const slugify = (value: string) =>
   value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || `form-${Date.now()}`;
@@ -41,6 +42,9 @@ export default function AdminForms() {
   const [forms, setForms] = useState<CustomForm[]>([]);
   const [entries, setEntries] = useState<Record<string, number>>({});
   const [activeEntries, setActiveEntries] = useState<CustomFormEntry[]>([]);
+  const [activeEntryCount, setActiveEntryCount] = useState(0);
+  const [activeEntriesPage, setActiveEntriesPage] = useState(1);
+  const [activeEntriesLoading, setActiveEntriesLoading] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploadingHeader, setUploadingHeader] = useState(false);
@@ -54,19 +58,33 @@ export default function AdminForms() {
   useEffect(() => {
     if (!active?.id) {
       setActiveEntries([]);
+      setActiveEntryCount(0);
+      setActiveEntriesLoading(false);
       return;
     }
+    let cancelled = false;
+    setActiveEntriesLoading(true);
     supabase
       .from('custom_form_entries')
-      .select('*')
+      .select('*', { count: 'exact' })
       .eq('form_id', active.id)
       .order('created_at', { ascending: false })
-      .limit(50)
-      .then(({ data, error }) => {
+      .range((activeEntriesPage - 1) * ENTRY_PAGE_SIZE, activeEntriesPage * ENTRY_PAGE_SIZE - 1)
+      .then(({ data, error, count }) => {
+        if (cancelled) return;
         if (error) console.error('Form entries load error:', error);
-        setActiveEntries((data || []) as CustomFormEntry[]);
+        const loaded = (data || []) as CustomFormEntry[];
+        setActiveEntries(loaded);
+        setActiveEntryCount(count || 0);
+        setEntries((current) => ({ ...current, [active.id]: count || 0 }));
+        const lastPage = Math.max(1, Math.ceil((count || 0) / ENTRY_PAGE_SIZE));
+        if (count !== null && activeEntriesPage > lastPage) setActiveEntriesPage(lastPage);
+      })
+      .finally(() => {
+        if (!cancelled) setActiveEntriesLoading(false);
       });
-  }, [active?.id]);
+    return () => { cancelled = true; };
+  }, [active?.id, activeEntriesPage]);
 
   async function loadForms() {
     const { data, error } = await supabase.from('custom_forms').select('*').order('updated_at', { ascending: false });
@@ -77,6 +95,7 @@ export default function AdminForms() {
     const rows = (data || []) as CustomForm[];
     setForms(rows);
     setActiveId(rows[0]?.id || null);
+    setActiveEntriesPage(1);
 
     const counts = await Promise.all(rows.map(async (form) => {
       const { count } = await supabase.from('custom_form_entries').select('id', { count: 'exact', head: true }).eq('form_id', form.id);
@@ -189,6 +208,7 @@ export default function AdminForms() {
     }
     setForms((prev) => [data as CustomForm, ...prev]);
     setActiveId((data as CustomForm).id);
+    setActiveEntriesPage(1);
   }
 
   async function addYouthHangoutForm() {
@@ -211,6 +231,7 @@ export default function AdminForms() {
     }
     setForms((prev) => [data as CustomForm, ...prev]);
     setActiveId((data as CustomForm).id);
+    setActiveEntriesPage(1);
   }
 
   function patchColorAssignment(patch: Partial<FormColorAssignment>) {
@@ -252,21 +273,29 @@ export default function AdminForms() {
 
   async function exportEntries() {
     if (!active) return;
-    const { data, error } = await supabase
-      .from('custom_form_entries')
-      .select('*')
-      .eq('form_id', active.id)
-      .order('created_at', { ascending: false });
-    if (error) {
-      alert(error.message || 'Failed to export entries.');
-      return;
+    const allEntries: CustomFormEntry[] = [];
+    const exportPageSize = 1000;
+    for (let from = 0; ; from += exportPageSize) {
+      const { data, error } = await supabase
+        .from('custom_form_entries')
+        .select('*')
+        .eq('form_id', active.id)
+        .order('created_at', { ascending: false })
+        .range(from, from + exportPageSize - 1);
+      if (error) {
+        alert(error.message || 'Failed to export entries.');
+        return;
+      }
+      const page = (data || []) as CustomFormEntry[];
+      allEntries.push(...page);
+      if (page.length < exportPageSize) break;
     }
     const columns = ['submitted_at', ...active.fields.map((field) => field.label || field.id), 'assigned_color', 'assigned_group_url'];
     const csvCell = (value: unknown) => {
       const text = value == null ? '' : Array.isArray(value) ? value.join('; ') : String(value);
       return `"${text.replace(/"/g, '""')}"`;
     };
-    const rows = ((data || []) as CustomFormEntry[]).map((entry) => [
+    const rows = allEntries.map((entry) => [
       entry.created_at || '',
       ...active.fields.map((field) => (entry.values as any)?.[field.id]),
       (entry.values as any)?._assigned_color || '',
@@ -312,7 +341,7 @@ export default function AdminForms() {
           {forms.map((form) => (
             <button
               key={form.id}
-              onClick={() => setActiveId(form.id)}
+              onClick={() => { setActiveId(form.id); setActiveEntriesPage(1); }}
               className={`w-full border p-4 text-left ${active?.id === form.id ? 'border-primary bg-primary/5' : 'border-stone-200 bg-white'}`}
             >
               <p className="font-bold text-primary">{form.title}</p>
@@ -455,10 +484,13 @@ export default function AdminForms() {
 
             <div className="border-t border-stone-200 pt-6 space-y-4">
               <h2 className="text-xl font-bold text-primary">Entries</h2>
-              {activeEntries.length === 0 ? (
+              {activeEntriesLoading ? (
+                <p className="text-stone-500">Loading entries...</p>
+              ) : activeEntryCount === 0 ? (
                 <p className="text-stone-500">No entries yet.</p>
               ) : (
                 <div className="space-y-3">
+                  <p className="text-sm text-stone-500">Showing {(activeEntriesPage - 1) * ENTRY_PAGE_SIZE + 1}–{Math.min(activeEntriesPage * ENTRY_PAGE_SIZE, activeEntryCount)} of {activeEntryCount} entries</p>
                   {activeEntries.map((entry) => (
                     <div key={entry.id} className="border border-stone-200 p-4 bg-white">
                       <p className="text-xs font-bold uppercase tracking-widest text-stone-400 mb-3">{new Date(entry.created_at).toLocaleString()}</p>
@@ -478,6 +510,17 @@ export default function AdminForms() {
                       </div>
                     </div>
                   ))}
+                  {activeEntryCount > ENTRY_PAGE_SIZE ? (
+                    <div className="flex items-center justify-center gap-3 pt-2">
+                      <button type="button" onClick={() => setActiveEntriesPage((page) => Math.max(1, page - 1))} disabled={activeEntriesPage === 1 || activeEntriesLoading} className="inline-flex items-center gap-2 border border-stone-200 bg-white px-4 py-3 text-xs font-bold uppercase tracking-widest text-primary disabled:opacity-40">
+                        <ChevronLeft className="h-4 w-4" /> Prev
+                      </button>
+                      <span className="text-xs font-bold uppercase tracking-widest text-stone-500">Page {activeEntriesPage} / {Math.ceil(activeEntryCount / ENTRY_PAGE_SIZE)}</span>
+                      <button type="button" onClick={() => setActiveEntriesPage((page) => Math.min(Math.ceil(activeEntryCount / ENTRY_PAGE_SIZE), page + 1))} disabled={activeEntriesPage >= Math.ceil(activeEntryCount / ENTRY_PAGE_SIZE) || activeEntriesLoading} className="inline-flex items-center gap-2 border border-stone-200 bg-white px-4 py-3 text-xs font-bold uppercase tracking-widest text-primary disabled:opacity-40">
+                        Next <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               )}
             </div>

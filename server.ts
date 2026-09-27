@@ -9,6 +9,8 @@ import { createRequire } from "module";
 import { createClient } from "@supabase/supabase-js";
 import webPush from "web-push";
 import { buildAnalyticsPayload } from "./src/lib/analytics";
+import { renderEventShareHtml } from "./src/lib/eventShareHtml";
+import contentShareHandler from "./api/share/[type]/[key]";
 
 function loadEnv() {
   // Match Vite's typical env file precedence:
@@ -26,7 +28,12 @@ function loadEnv() {
 loadEnv();
 
 const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").trim();
+const SUPABASE_ANON_KEY = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "").trim();
 const SUPABASE_SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+
+const supabasePublic = SUPABASE_URL && SUPABASE_ANON_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false } })
+  : null;
 
 const supabaseAdmin = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
   ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } })
@@ -48,6 +55,37 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(express.json());
+
+  for (const type of ["event", "article", "sermon", "devotional"] as const) {
+    app.get(`/${type}/:key`, (req, res) => {
+      (req.params as Record<string, string>).type = type;
+      return contentShareHandler(req, res);
+    });
+  }
+
+  app.get("/api/share/:type/:key", contentShareHandler);
+
+  app.get("/api/event-share/:id", async (req, res) => {
+    if (!supabasePublic) return res.status(500).send("Event previews are not configured.");
+    try {
+      const { data: event, error } = await supabasePublic
+        .from("events")
+        .select("id,title,description,image_url,status,published_at")
+        .eq("id", req.params.id)
+        .maybeSingle();
+      if (error || !event || event.status === "draft" || (event.published_at && new Date(event.published_at) > new Date())) {
+        return res.status(404).send("Event not found.");
+      }
+      const forwardedHost = req.get("x-forwarded-host")?.split(",")[0].trim();
+      const host = forwardedHost || req.get("host") || "localhost:3000";
+      const protocol = req.get("x-forwarded-proto")?.split(",")[0].trim() || req.protocol;
+      res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=600");
+      return res.type("html").send(renderEventShareHtml(event, `${protocol}://${host}`));
+    } catch (error) {
+      console.error("Event share preview error:", error);
+      return res.status(500).send("Could not load event preview.");
+    }
+  });
 
   // Cloudflare R2 / S3 Configuration
   const s3Client = new S3Client({

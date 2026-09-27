@@ -25,7 +25,7 @@ export default function PostDetail() {
   const isHidden = !post || post.status !== 'published' || (!!post.published_at && new Date(post.published_at) > new Date());
   const handleShare = async () => {
     if (!post) return;
-    const url = buildShareUrl('article', post.title, post.id, post.slug);
+    const url = buildShareUrl('article', post.title, post.id, post.slug, post.image_url);
     const text = `${post.title} - RCCG HOPFAN Editorial`;
     try {
       if (navigator.share) {
@@ -402,12 +402,12 @@ export default function PostDetail() {
               </div>
 
               {relatedPosts.length > 0 ? (
-                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 sm:gap-4 xl:grid-cols-3">
                   {relatedPosts.map((item) => (
                     <Link
                       key={item.id}
                       to={`/editorial/${item.slug}`}
-                      className="group border border-stone-100 bg-stone-50/40 hover:bg-white hover:border-accent/30 transition-all overflow-hidden rounded-2xl"
+                      className="group min-w-0 overflow-hidden rounded-lg border border-stone-100 bg-stone-50/40 transition-all hover:border-accent/30 hover:bg-white"
                     >
                       <div className="aspect-[4/3] overflow-hidden bg-stone-100">
                         <img
@@ -417,12 +417,12 @@ export default function PostDetail() {
                           referrerPolicy="no-referrer"
                         />
                       </div>
-                      <div className="p-4 space-y-2">
+                      <div className="space-y-2 p-3 sm:p-4">
                         <p className="text-[10px] font-bold uppercase tracking-widest text-accent">
                           <BookOpen className="w-3.5 h-3.5 inline-block mr-1" />
                           {format(new Date(item.published_at), 'MMM d, yyyy')}
                         </p>
-                        <h4 className="text-lg font-serif font-bold text-primary group-hover:text-accent transition-colors line-clamp-2">
+                        <h4 className="break-words text-base font-serif font-bold text-primary transition-colors line-clamp-2 group-hover:text-accent sm:text-lg">
                           {item.title}
                         </h4>
                       </div>

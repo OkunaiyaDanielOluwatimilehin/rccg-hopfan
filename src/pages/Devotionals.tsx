@@ -110,7 +110,7 @@ export default function Devotionals() {
 
   const handleShare = async () => {
     if (!devotional) return;
-    const url = buildShareUrl('devotional', devotional.title, devotional.id);
+    const url = buildShareUrl('devotional', devotional.title, devotional.id, undefined, devotional.image_url);
     const text = `${devotional.title}${devotional.scripture_reference ? ` - ${devotional.scripture_reference}` : ''}`;
 
     try {
@@ -391,18 +391,22 @@ export default function Devotionals() {
 
                   {relatedDevotionals.length > 0 ? (
                     <>
-                      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {visibleRelatedDevotionals.map((item) => (
-                          <article key={item.id} className="border border-stone-100 bg-stone-50/40 hover:bg-white hover:border-accent/30 transition-all overflow-hidden rounded-2xl">
-                            <div className="p-5 space-y-3">
+                      <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-3 sm:gap-4">
+                        {visibleRelatedDevotionals.map((item) => {
+                          const itemDate = item.devotional_date || item.date || item.published_at?.slice(0, 10) || '';
+                          return (
+                          <Link key={item.id} to={itemDate ? `/devotionals?date=${itemDate}` : '/devotionals'} className="group min-w-0 overflow-hidden rounded-lg border border-stone-100 bg-stone-50/40 transition-all hover:border-accent/30 hover:bg-white">
+                            {item.image_url ? <img src={item.image_url} alt="" className="aspect-video w-full object-cover" referrerPolicy="no-referrer" /> : null}
+                            <div className="space-y-2 p-3 sm:space-y-3 sm:p-5">
                               <p className="text-[10px] font-bold uppercase tracking-widest text-accent">
-                                {item.date ? format(new Date(item.date), 'MMM d, yyyy') : 'Devotional'}
+                                {itemDate ? format(new Date(itemDate), 'MMM d, yyyy') : 'Devotional'}
                               </p>
-                              <h4 className="text-lg font-serif font-bold text-primary line-clamp-2">{item.title}</h4>
+                              <h4 className="break-words text-base font-serif font-bold text-primary line-clamp-2 group-hover:text-accent sm:text-lg">{item.title}</h4>
                               <p className="text-sm text-stone-500 line-clamp-3">{item.scripture_reference || item.author || 'Daily devotional'}</p>
                             </div>
-                          </article>
-                        ))}
+                          </Link>
+                          );
+                        })}
                       </div>
                       {relatedDevotionals.length > RELATED_PAGE_SIZE ? (
                         <div className="flex items-center justify-center gap-3 pt-2">

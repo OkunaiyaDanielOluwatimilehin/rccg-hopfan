@@ -16,7 +16,7 @@ const escapeHtml = (value: string) => value
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
 
-export function renderContentShareHtml(content: ShareContent, origin: string, sharePath: string) {
+export function renderContentShareHtml(content: ShareContent, origin: string, sharePath: string, imageVersion = '') {
   const title = `${content.title} | RCCG HOPFAN`;
   const description = String(content.description || `Read ${content.title} from RCCG HOPFAN.`)
     .replace(/<[^>]*>/g, ' ')
@@ -28,7 +28,10 @@ export function renderContentShareHtml(content: ShareContent, origin: string, sh
   let image = new URL('/Rccg_logo.png', origin).toString();
   try {
     const candidate = new URL(content.image || '', origin);
-    if (candidate.protocol === 'https:' || candidate.protocol === 'http:') image = candidate.toString();
+    if (candidate.protocol === 'https:' || candidate.protocol === 'http:') {
+      if (imageVersion) candidate.searchParams.set('share', imageVersion);
+      image = candidate.toString();
+    }
   } catch {
     // Use site logo when content has no valid public image URL.
   }
