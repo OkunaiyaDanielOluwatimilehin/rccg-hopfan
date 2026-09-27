@@ -1,6 +1,26 @@
 {
   "rewrites": [
     {
+      "source": "/event/:key",
+      "destination": "/api/share/event/:key"
+    },
+    {
+      "source": "/article/:key",
+      "destination": "/api/share/article/:key"
+    },
+    {
+      "source": "/sermon/:key",
+      "destination": "/api/share/sermon/:key"
+    },
+    {
+      "source": "/devotional/:key",
+      "destination": "/api/share/devotional/:key"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
