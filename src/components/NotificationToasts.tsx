@@ -221,19 +221,21 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     async function loadContent() {
       const seen = new Set(JSON.parse(localStorage.getItem('hopfan_seen_content_toasts') || '[]'));
       const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const now = new Date().toISOString();
       const [events, sermons, posts, devotionals] = await Promise.all([
-        supabase.from('events').select('id,title,created_at').gte('created_at', since).order('created_at', { ascending: false }).limit(1),
+        supabase.from('events').select('id,title,created_at').eq('status', 'published').lte('published_at', now).gte('created_at', since).order('created_at', { ascending: false }).limit(1),
         supabase.from('sermons').select('id,title,created_at').gte('created_at', since).order('created_at', { ascending: false }).limit(1),
         supabase.from('posts').select('id,title,slug,created_at').eq('status', 'published').gte('created_at', since).order('created_at', { ascending: false }).limit(1),
         supabase.from('devotionals').select('id,title,created_at').eq('status', 'published').gte('created_at', since).order('created_at', { ascending: false }).limit(1),
       ]);
       if (cancelled) return;
-      const candidates = [
-        events.data?.[0] && { toast: buildContentToast('event', events.data[0].title, `/events/${events.data[0].id}`), sourceId: events.data[0].id },
-        sermons.data?.[0] && { toast: buildContentToast('sermon', sermons.data[0].title, `/sermons/${sermons.data[0].id}`), sourceId: sermons.data[0].id },
-        posts.data?.[0] && { toast: buildContentToast('article', posts.data[0].title, `/editorial/${(posts.data[0] as any).slug}`), sourceId: posts.data[0].id },
-        devotionals.data?.[0] && { toast: buildContentToast('devotional', devotionals.data[0].title, '/devotionals'), sourceId: devotionals.data[0].id },
-      ].filter(Boolean) as Array<{ toast: Omit<AppToast, 'id'>; sourceId: string }>;
+      const eventCandidate = events.data?.[0] && { toast: buildContentToast('event', events.data[0].title, `/events/${events.data[0].id}`), sourceId: events.data[0].id };
+      const fallbackCandidates = [
+        sermons.data?.[0] && { toast: buildContentToast('sermon', sermons.data[0].title, `/sermons/${sermons.data[0].id}`), sourceId: sermons.data[0].id, createdAt: sermons.data[0].created_at },
+        posts.data?.[0] && { toast: buildContentToast('article', posts.data[0].title, `/editorial/${(posts.data[0] as any).slug}`), sourceId: posts.data[0].id, createdAt: posts.data[0].created_at },
+        devotionals.data?.[0] && { toast: buildContentToast('devotional', devotionals.data[0].title, '/devotionals'), sourceId: devotionals.data[0].id, createdAt: devotionals.data[0].created_at },
+      ].filter(Boolean) as Array<{ toast: Omit<AppToast, 'id'>; sourceId: string; createdAt: string }>;
+      const candidates = eventCandidate ? [eventCandidate] : fallbackCandidates.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       candidates.forEach(({ toast, sourceId }) => {
         const id = `content:${toast.kind}:${sourceId}`;
         if (!seen.has(id)) {

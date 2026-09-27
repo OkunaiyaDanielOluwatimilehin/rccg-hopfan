@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { Calendar, Clock, MapPin, ArrowLeft, Share2, Tag, HeartHandshake } from 'lucide-react';
-import { ChurchEvent } from '../types';
+import { ChurchEvent, CustomForm } from '../types';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import Seo from '../components/Seo';
@@ -12,9 +12,11 @@ const EventDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [event, setEvent] = useState<ChurchEvent | null>(null);
   const [relatedEvents, setRelatedEvents] = useState<ChurchEvent[]>([]);
+  const [eventForm, setEventForm] = useState<CustomForm | null>(null);
+  const [formLoading, setFormLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [interestedOpen, setInterestedOpen] = useState(false);
-  const shareUrl = useMemo(() => (typeof window !== 'undefined' ? window.location.href : ''), []);
+  const shareUrl = useMemo(() => (typeof window !== 'undefined' && id ? `${window.location.origin}/api/event-share/${encodeURIComponent(id)}` : ''), [id]);
 
   useEffect(() => {
     const fetchEvent = async () => {
@@ -30,6 +32,7 @@ const EventDetail: React.FC = () => {
         if ((data as any)?.status === 'draft' || ((data as any)?.published_at && new Date((data as any).published_at) > new Date())) {
           setEvent(null);
         } else {
+          setFormLoading(Boolean((data as ChurchEvent).form_id));
           setEvent(data as ChurchEvent);
         }
       } catch (error) {
@@ -66,6 +69,19 @@ const EventDetail: React.FC = () => {
 
     loadRelatedEvents();
   }, [event]);
+
+  useEffect(() => {
+    if (!event?.form_id) {
+      setEventForm(null);
+      setFormLoading(false);
+      return;
+    }
+    setEventForm(null);
+    setFormLoading(true);
+    supabase.from('custom_forms').select('*').eq('id', event.form_id).eq('status', 'published').maybeSingle()
+      .then(({ data }) => setEventForm((data as CustomForm) || null))
+      .finally(() => setFormLoading(false));
+  }, [event?.form_id]);
 
   const handleShare = async () => {
     if (!event) return;
@@ -113,7 +129,7 @@ const EventDetail: React.FC = () => {
         type="article"
       />
 
-      <section className="relative h-[48vh] sm:h-[60vh] flex items-end overflow-hidden bg-primary">
+      <section className="relative flex min-h-[32rem] items-end overflow-hidden bg-primary sm:min-h-[38rem]">
         <img
           src={event.image_url || 'https://images.unsplash.com/photo-1438029071396-1e831a7fa6d8?auto=format&fit=crop&q=80'}
           alt={event.title}
@@ -131,11 +147,11 @@ const EventDetail: React.FC = () => {
               <span className="inline-block bg-accent text-white px-4 py-1 text-[10px] sm:text-xs font-bold uppercase tracking-widest mb-4 sm:mb-6">
                 {event.category}
               </span>
-              <h1 className="text-3xl sm:text-5xl md:text-7xl font-serif font-bold text-white leading-tight mb-5 sm:mb-8 tracking-tight">
+              <h1 className="break-words text-3xl sm:text-5xl md:text-7xl font-serif font-bold text-white leading-tight mb-5 sm:mb-8">
                 {event.title}
               </h1>
 
-              <div className="flex flex-wrap gap-4 sm:gap-8 text-white/90 text-sm sm:text-base">
+              <div className="grid gap-3 text-white/90 text-sm sm:flex sm:flex-wrap sm:gap-6 sm:text-base">
                 <div className="flex items-center gap-3 min-w-0">
                   <Calendar className="w-5 h-5 text-accent" />
                   <span className="font-medium">{format(new Date(event.event_date), 'EEEE, MMMM do, yyyy')}</span>
@@ -188,31 +204,35 @@ const EventDetail: React.FC = () => {
                 Event Details
               </h4>
               <div className="space-y-4 sm:space-y-6">
-                <div className="flex justify-between items-center border-b border-white/10 pb-4 gap-4">
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 border-b border-white/10 pb-4">
                   <span className="text-stone-400 text-sm uppercase tracking-widest font-bold">Category</span>
                   <span className="font-medium">{event.category}</span>
                 </div>
-                <div className="flex justify-between items-center border-b border-white/10 pb-4 gap-4">
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 border-b border-white/10 pb-4">
                   <span className="text-stone-400 text-sm uppercase tracking-widest font-bold">Date</span>
                   <span className="font-medium">{format(new Date(event.event_date), 'MMM d, yyyy')}</span>
                 </div>
-                <div className="flex justify-between items-center border-b border-white/10 pb-4 gap-4">
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 border-b border-white/10 pb-4">
                   <span className="text-stone-400 text-sm uppercase tracking-widest font-bold">Time</span>
                   <span className="font-medium">{event.event_time}</span>
                 </div>
-                <div className="flex justify-between items-start border-b border-white/10 pb-4 gap-4">
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 border-b border-white/10 pb-4">
                   <span className="text-stone-400 text-sm uppercase tracking-widest font-bold">Location</span>
-                  <span className="font-medium text-right ml-4">{event.location}</span>
+                  <span className="max-w-[12rem] break-words text-right font-medium">{event.location}</span>
                 </div>
               </div>
 
-              <button
-                onClick={() => setInterestedOpen(true)}
-                className="w-full bg-accent hover:bg-accent/90 text-white font-bold py-4 mt-8 sm:mt-10 transition-all shadow-lg shadow-accent/20 flex items-center justify-center gap-2"
-              >
-                <HeartHandshake className="w-4 h-4" />
-                I am Interested
-              </button>
+              {eventForm ? (
+                <Link to={`/forms/${eventForm.slug}`} className="mt-3 flex w-full items-center justify-center bg-white px-4 py-4 font-bold text-primary transition-colors hover:bg-stone-100">
+                  Open Registration Form
+                </Link>
+              ) : formLoading ? (
+                <div className="mt-8 flex min-h-12 w-full items-center justify-center text-sm text-white/70">Loading registration…</div>
+              ) : (
+                <button onClick={() => setInterestedOpen(true)} className="mt-8 flex w-full items-center justify-center gap-2 bg-accent py-4 font-bold text-white shadow-lg shadow-accent/20 transition-all hover:bg-accent/90 sm:mt-10">
+                  <HeartHandshake className="h-4 w-4" /> I’m interested
+                </button>
+              )}
             </motion.div>
 
             <div className="bg-white p-6 sm:p-10 border border-stone-100 shadow-lg">
@@ -224,13 +244,6 @@ const EventDetail: React.FC = () => {
                   className="p-4 bg-stone-50 hover:bg-accent hover:text-white transition-all rounded-full text-stone-400 group"
                 >
                   <Share2 className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setInterestedOpen(true)}
-                  className="p-4 bg-stone-50 hover:bg-accent hover:text-white transition-all rounded-full text-stone-400 group"
-                >
-                  <HeartHandshake className="w-5 h-5 group-hover:scale-110 transition-transform" />
                 </button>
               </div>
             </div>

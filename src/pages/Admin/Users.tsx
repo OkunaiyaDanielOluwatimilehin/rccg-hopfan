@@ -159,7 +159,6 @@ export default function AdminUsers() {
                           </div>
                           <div className="min-w-0">
                             <p className="font-bold text-primary truncate">{p.full_name || 'Member'}</p>
-                            <p className="text-xs text-stone-400 truncate">{p.id}</p>
                           </div>
                         </div>
                       </td>

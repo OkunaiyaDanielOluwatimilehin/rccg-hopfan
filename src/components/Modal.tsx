@@ -39,12 +39,12 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
             role="dialog"
             aria-modal="true"
             aria-labelledby={titleId}
-            className="relative w-[95vw] max-w-5xl bg-white border border-stone-200 shadow-2xl overflow-hidden rounded-xl max-h-[90vh]"
+            className="relative w-[96vw] max-w-5xl bg-white border border-stone-200 shadow-2xl overflow-hidden rounded-xl max-h-[92vh]"
           >
             <div className="max-h-[90vh] overflow-y-auto">
-              <div className="p-8 md:p-12">
-                <div className="flex justify-between items-start gap-6 mb-8">
-                  <h2 id={titleId} className="text-3xl font-serif font-bold text-primary leading-tight">{title}</h2>
+              <div className="p-4 sm:p-8 md:p-12">
+                <div className="flex justify-between items-start gap-3 sm:gap-6 mb-6 sm:mb-8">
+                  <h2 id={titleId} className="min-w-0 break-words text-xl sm:text-3xl font-serif font-bold text-primary leading-tight">{title}</h2>
                 <button
                   onClick={onClose}
                   className="p-2 hover:bg-stone-100 rounded-full transition-colors"

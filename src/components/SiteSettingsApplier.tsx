@@ -48,6 +48,9 @@ export default function SiteSettingsApplier() {
         root.style.setProperty('--font-serif', heading);
         root.style.setProperty('--font-display', heading);
         root.style.setProperty('--font-editorial', editorial);
+        if ((data as any).primary_color) root.style.setProperty('--color-primary', String((data as any).primary_color));
+        if ((data as any).accent_color) root.style.setProperty('--color-accent', String((data as any).accent_color));
+        if ((data as any).cream_color) root.style.setProperty('--color-cream', String((data as any).cream_color));
       } catch (e) {
         // Settings are optional; fail silently.
         console.error('Failed to apply site typography settings:', e);

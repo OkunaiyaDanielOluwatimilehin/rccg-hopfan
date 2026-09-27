@@ -83,6 +83,16 @@ const ACTIVITY_PATHS: Record<string, string> = {
   department_request: '/admin/department-requests',
 };
 
+const ROLE_ACTIVITY_TYPES: Record<AdminRole, string[]> = {
+  admin: [],
+  editorial: ['post', 'sermon', 'devotional'],
+  prayer: ['prayer_request'],
+  counselor: ['counseling_request'],
+  follow_up: ['newcomer', 'custom_form_entry'],
+  department_admin: ['department_request'],
+  member: [],
+};
+
 export default function AdminNotifications() {
   const { user } = useAuth();
   const [profile, setProfile] = useState<ProfileRow | null>(null);
@@ -149,7 +159,12 @@ export default function AdminNotifications() {
       request_type: item.request_type,
     }));
 
-    const activityItems: FeedItem[] = activity.map((item) => ({
+    const allowedActivityTypes = ROLE_ACTIVITY_TYPES[profile?.role || 'member'];
+    const visibleActivity = profile?.role === 'admin'
+      ? activity
+      : activity.filter((item) => allowedActivityTypes.includes(item.entity_type));
+
+    const activityItems: FeedItem[] = visibleActivity.map((item) => ({
       key: `activity:${item.id}`,
       source: 'activity',
       title: item.title,
@@ -164,7 +179,7 @@ export default function AdminNotifications() {
     }));
 
     return [...requestItems, ...activityItems].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  }, [activity, requests]);
+  }, [activity, profile?.role, requests]);
 
   const unreadCount = useMemo(() => requests.filter((item) => !item.read_at).length, [requests]);
   const visibleItems = useMemo(() => {

@@ -43,6 +43,14 @@ function renderHeroSubtitle(subtitle: string) {
     ));
 }
 
+function makePreviewText(value: unknown, maxLength = 180) {
+  const text = String(value || '')
+    .replace(/[#>*_`~]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text.length > maxLength ? `${text.slice(0, maxLength).trimEnd()}...` : text;
+}
+
 function resolveLiveEmbedUrl(url?: string | null) {
   const raw = String(url || '').trim();
   if (!raw) return '';
@@ -79,6 +87,8 @@ export default function Home() {
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
   const [events, setEvents] = useState<ChurchEvent[]>([]);
   const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
+  const [builderSections, setBuilderSections] = useState<any[]>([]);
+  const [homepageEditorMode, setHomepageEditorMode] = useState<'settings' | 'builder'>('settings');
 
   useEffect(() => {
     async function fetchAllData() {
@@ -93,7 +103,8 @@ export default function Home() {
           leadersRes,
           galleryRes,
           eventsRes,
-          testimonialsRes
+          testimonialsRes,
+          builderRes
         ] = await Promise.all([
           // Schema uses `status` (not `published`) and RLS allows everyone to select published posts.
           supabase.from('posts').select('*').eq('status', 'published').lte('published_at', nowIso).limit(8).order('published_at', { ascending: false }),
@@ -104,7 +115,8 @@ export default function Home() {
           supabase.from('leadership').select('*').order('order_index', { ascending: true }),
           supabase.from('gallery').select('*').limit(24).order('created_at', { ascending: false }),
           supabase.from('events').select('*').order('event_date', { ascending: true }),
-          supabase.from('testimonials').select('*').eq('approved', true).limit(3)
+          supabase.from('testimonials').select('*').eq('approved', true).limit(3),
+          supabase.from('page_builder_pages').select('sections').eq('page_slug', 'home').eq('status', 'published').maybeSingle()
         ]);
 
         const firstError =
@@ -123,12 +135,16 @@ export default function Home() {
         if (postsRes.data) setPosts(postsRes.data);
         if (devRes.data) setDevotionals(devRes.data);
         if (sermonsRes.data) setSermons(sermonsRes.data.filter((sermon: Sermon) => isVisibleSermon(sermon)));
-        if (settingsRes.data) setSettings(settingsRes.data);
+        if (settingsRes.data) {
+          setSettings(settingsRes.data);
+          setHomepageEditorMode((settingsRes.data as any)?.homepage_editor_mode === 'builder' ? 'builder' : 'settings');
+        }
         if (deptsRes.data) setDepartments(deptsRes.data);
         if (leadersRes.data) setLeadership(leadersRes.data);
         if (galleryRes.data) setGallery(galleryRes.data);
         if (eventsRes.data) setEvents(eventsRes.data);
         if (testimonialsRes.data) setTestimonials(testimonialsRes.data);
+        if (!builderRes.error && Array.isArray((builderRes.data as any)?.sections)) setBuilderSections((builderRes.data as any).sections);
       } catch (error) {
         console.error('Error fetching home data:', error);
       }
@@ -136,8 +152,7 @@ export default function Home() {
     fetchAllData();
   }, []);
 
-  // Default values if settings are not yet in DB
-  const heroTitle = 'WELCOME TO RCCG HOUSE\nOF PRAYER FOR ALL NATIONS.';
+  const heroTitle = settings?.hero_title || '';
   const heroSubtitle = settings?.hero_subtitle || '';
   const heroPrimaryImage = settings?.hero_image_url || '';
   const liveEmbedUrl = resolveLiveEmbedUrl(settings?.live_embed_url);
@@ -156,6 +171,33 @@ export default function Home() {
   const featuredDepartmentLimit = featuredDepartmentColumns * featuredDepartmentRows;
 
   const serviceTimes = settings?.service_times || [];
+  const builderIndex = useMemo(() => {
+    const map = new Map<string, any>();
+    builderSections.forEach((section, index) => {
+      if (section?.type) map.set(section.type, { ...section, order: index });
+    });
+    return map;
+  }, [builderSections]);
+  const builderStyle = (type: string): React.CSSProperties => {
+    if (homepageEditorMode !== 'builder') return {};
+    const section = builderIndex.get(type);
+    if (!section) return { display: 'none' };
+    return {
+      order: section.order,
+      display: section.enabled === false ? 'none' : undefined,
+    };
+  };
+  const customBuilderSections = useMemo(
+    () => homepageEditorMode === 'builder' ? builderSections
+      .map((section, index) => ({ ...section, order: index }))
+      .filter((section) => section?.type === 'custom') : [],
+    [builderSections, homepageEditorMode],
+  );
+  const customBuilderStyle = (section: any): React.CSSProperties => ({
+    order: section.order,
+    display: section.enabled === false ? 'none' : undefined,
+    background: section.settings?.background || '#ffffff',
+  });
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [activeModal, setActiveModal] = useState<'prayer' | 'counseling' | 'giving' | null>(null);
@@ -215,7 +257,7 @@ export default function Home() {
       ];
 
   const visibleEvents = useMemo(
-    () => events.filter((event) => !event.published_at || new Date(event.published_at) <= new Date()),
+    () => events.filter((event) => event.status !== 'draft' && (!event.published_at || new Date(event.published_at) <= new Date())),
     [events],
   );
   const customHomeBannerItems = useMemo(() => {
@@ -225,6 +267,7 @@ export default function Home() {
         const linkedEvent = item.event_id ? visibleEvents.find((event) => event.id === item.event_id) : null;
         return {
           id: item.id,
+          eventId: linkedEvent?.id || '',
           eyebrow: item.eyebrow || settings?.home_banner_title || 'Featured',
           title: item.title || linkedEvent?.title || '',
           message: item.message || linkedEvent?.description || settings?.home_banner_message || '',
@@ -246,8 +289,9 @@ export default function Home() {
   const homeBannerEvents = homeBannerEventIds
     .map((id) => visibleEvents.find((event) => event.id === id))
     .filter(Boolean) as ChurchEvent[];
-  const fallbackBannerItems = homeBannerEvents.map((event) => ({
+  const eventBannerItems = homeBannerEvents.map((event) => ({
     id: event.id,
+    eventId: event.id,
     eyebrow: settings?.home_banner_title || 'Upcoming Events',
     title: event.title,
     message: settings?.home_banner_message || event.description || '',
@@ -258,9 +302,45 @@ export default function Home() {
     eventTime: event.event_time || '',
     location: event.location || '',
   }));
-  const homeBannerItems = customHomeBannerItems.length > 0 ? customHomeBannerItems : fallbackBannerItems;
+  const contentBannerItems = [
+    posts[0] ? {
+      id: `post-${posts[0].id}`,
+      eventId: '',
+      eyebrow: 'Latest Article',
+      title: posts[0].title,
+      message: posts[0].summary || posts[0].byline || '',
+      buttonLabel: 'Read Article',
+      buttonUrl: `/editorial/${posts[0].slug}`,
+      imageUrl: posts[0].image_url || '',
+      eventDate: '', eventTime: '', location: '',
+    } : null,
+    sermons[0] ? {
+      id: `sermon-${sermons[0].id}`,
+      eventId: '',
+      eyebrow: 'Latest Sermon',
+      title: sermons[0].title,
+      message: sermons[0].description || sermons[0].speaker_name || '',
+      buttonLabel: 'Watch Sermon',
+      buttonUrl: `/sermons/${sermons[0].id}`,
+      imageUrl: sermons[0].thumbnail_url || '',
+      eventDate: '', eventTime: '', location: '',
+    } : null,
+    devotionals[0] ? {
+      id: `devotional-${devotionals[0].id}`,
+      eventId: '',
+      eyebrow: 'Latest Devotional',
+      title: devotionals[0].title,
+      message: devotionals[0].content || '',
+      buttonLabel: 'Read Devotional',
+      buttonUrl: '/devotionals',
+      imageUrl: devotionals[0].image_url || '',
+      eventDate: '', eventTime: '', location: '',
+    } : null,
+  ].filter(Boolean) as typeof eventBannerItems;
+  const nonEventBannerItems = customHomeBannerItems.filter((item) => !item.eventId);
+  const homeBannerItems = nonEventBannerItems.length > 0 ? nonEventBannerItems : contentBannerItems;
   const homeBannerItem = homeBannerItems[homeBannerIndex] || homeBannerItems[0];
-  const showHomeBanner = Boolean(settings?.home_banner_enabled && homeBannerItems.length > 0 && homeBannerItem);
+  const showHomeBanner = Boolean(settings?.home_banner_enabled && homeBannerItems.length > 0 && homeBannerItem && !homeBannerItem.eventId);
 
   const featuredDepartments = useMemo(() => {
     const selected = featuredDepartmentIds.filter(Boolean);
@@ -304,7 +384,7 @@ export default function Home() {
         kind: 'post' as const,
         id: latestPost.id,
         title: latestPost.title,
-        subtitle: (latestPost.summary as any) || latestPost.byline || 'Latest article from our editorial archive.',
+        subtitle: makePreviewText(latestPost.summary || latestPost.byline || 'Latest article from our editorial archive.'),
         badge: 'Article',
         imageUrl: latestPost.image_url || 'https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&q=80&w=2000',
         href: `/editorial/${latestPost.slug}`,
@@ -313,7 +393,7 @@ export default function Home() {
         kind: 'devotional' as const,
         id: latestDevotional.id,
         title: latestDevotional.title,
-        subtitle: latestDevotional.content || 'Latest devotional reflection from the ministry.',
+        subtitle: makePreviewText(latestDevotional.content || 'Latest devotional reflection from the ministry.'),
         badge: 'Devotional',
         imageUrl: latestDevotional.image_url || 'https://images.unsplash.com/photo-1508128217447-2d5d3cd87e2b?auto=format&fit=crop&q=80&w=2000',
         href: '/devotionals',
@@ -322,7 +402,7 @@ export default function Home() {
         kind: 'sermon' as const,
         id: latestSermon.id,
         title: latestSermon.title,
-        subtitle: latestSermon.description || latestSermon.speaker_name || 'Latest sermon from the pulpit.',
+        subtitle: makePreviewText(latestSermon.description || latestSermon.speaker_name || 'Latest sermon from the pulpit.'),
         badge: 'Sermon',
         imageUrl: latestSermon.thumbnail_url || 'https://images.unsplash.com/photo-1507692049790-de58290a4334?auto=format&fit=crop&q=80&w=2000',
         href: `/sermons/${latestSermon.id}`,
@@ -331,7 +411,7 @@ export default function Home() {
         kind: 'event' as const,
         id: latestEvent.id,
         title: latestEvent.title,
-        subtitle: latestEvent.description || 'Latest church event and announcement.',
+        subtitle: makePreviewText(latestEvent.description || 'Latest church event and announcement.'),
         badge: 'Event',
         imageUrl: latestEvent.image_url || 'https://images.unsplash.com/photo-1438029071396-1e831a7fa6d8?auto=format&fit=crop&q=80&w=2000',
         href: `/events/${latestEvent.id}`,
@@ -347,19 +427,11 @@ export default function Home() {
     }>;
   }, [posts, devotionals, sermons, visibleEvents]);
 
-  const latestEventSlides = useMemo(
-    () =>
-      [...visibleEvents]
-        .sort((a, b) => new Date(b.event_date).getTime() - new Date(a.event_date).getTime())
-        .slice(0, 5),
-    [visibleEvents],
-  );
-
   useEffect(() => {
     if (latestSlides.length < 2) return;
     const id = window.setInterval(() => {
       setLatestIndex((i) => (i + 1) % latestSlides.length);
-    }, 9000);
+    }, 15000);
     return () => window.clearInterval(id);
   }, [latestSlides.length]);
 
@@ -417,7 +489,7 @@ export default function Home() {
   };
 
   return (
-      <div className="space-y-24 pb-20 overflow-x-hidden">
+      <div className="flex flex-col gap-24 pb-20 overflow-x-hidden">
       <Seo
         title={heroTitle ? `${heroTitle} | RCCG HOPFAN` : 'RCCG HOPFAN'}
         description={heroSubtitle || 'RCCG HOPFAN church home page with sermons, events, devotionals, and more.'}
@@ -425,7 +497,7 @@ export default function Home() {
         path="/"
       />
       {/* Hero Section */}
-      <section className="relative mt-4 flex min-h-fit items-center justify-start overflow-hidden bg-primary sm:mt-6">
+      <section style={builderStyle('hero')} className="relative mt-4 flex min-h-fit items-center justify-start overflow-hidden bg-primary sm:mt-6">
         {heroImages.length > 0 && (
           <AnimatePresence mode="wait">
             <motion.img
@@ -481,7 +553,7 @@ export default function Home() {
       </section>
 
       {showLiveEmbed ? (
-        <section id="live-stream" className="w-full px-4 sm:px-8 md:px-16 py-10 bg-stone-50 border-t-2 border-stone-200">
+        <section style={builderStyle('live')} id="live-stream" className="w-full px-4 sm:px-8 md:px-16 py-10 bg-stone-50 border-t-2 border-stone-200">
           <div className="grid lg:grid-cols-[0.8fr,1.2fr] gap-8 items-center">
             <div className="space-y-5">
               <div className="inline-flex items-center gap-3 bg-red-50 text-red-700 px-4 py-2 border border-red-100 text-xs font-bold uppercase tracking-[0.3em]">
@@ -509,7 +581,16 @@ export default function Home() {
       ) : null}
 
       {showHomeBanner && homeBannerItem && (
-        <section className="w-full px-4 sm:px-8 md:px-16 -mt-10 relative z-20">
+        <section style={builderStyle('featured')} className={`relative z-20 w-full ${homeBannerItem.eventId ? '-mt-10' : 'px-4 sm:px-8 md:px-16 -mt-10'}`}>
+          {homeBannerItem.eventId ? (
+            <Link to={`/events/${homeBannerItem.eventId}`} className="group relative block h-64 w-full overflow-hidden bg-primary sm:h-96 lg:h-[34rem]">
+              {homeBannerItem.imageUrl ? <img src={homeBannerItem.imageUrl} alt={homeBannerItem.title} className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.02]" referrerPolicy="no-referrer" /> : null}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
+              <div className="absolute inset-x-0 bottom-0 p-5 sm:p-10 md:p-14">
+                <h2 className="max-w-5xl text-3xl font-serif font-bold leading-tight text-white sm:text-5xl md:text-6xl">{homeBannerItem.title}</h2>
+              </div>
+            </Link>
+          ) : (
           <div className="bg-white border border-stone-200 shadow-2xl shadow-primary/10 overflow-hidden">
             <div className="grid grid-cols-1 lg:grid-cols-[220px,1fr,auto] items-stretch">
               <div
@@ -562,61 +643,12 @@ export default function Home() {
               </div>
             </div>
           </div>
-        </section>
-      )}
-
-      {/* Event Carousel */}
-      {latestEventSlides.length > 0 && (
-        <section id="events" className="w-full px-4 sm:px-8 md:px-16 py-6 sm:py-12">
-          <div className="relative overflow-hidden bg-primary h-[320px] sm:h-[460px] group">
-            <motion.div
-              animate={{ x: [0, `${-100 * (latestEventSlides.length - 1)}%`] }}
-              transition={{ duration: 22, repeat: Infinity, ease: 'linear' }}
-              className="flex h-full"
-            >
-              {latestEventSlides.map((event, idx) => {
-                const eventDate = new Date(event.event_date);
-                return (
-                  <div key={event.id || idx} className="min-w-full h-full relative">
-                    <img
-                      src={event.image_url || 'https://images.unsplash.com/photo-1438029071396-1e831a7fa6d8?auto=format&fit=crop&q=80'}
-                      alt={event.title}
-                      className="absolute inset-0 w-full h-full object-cover opacity-60"
-                      referrerPolicy="no-referrer"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-r from-primary via-primary/70 to-primary/20" />
-                    <div className="absolute inset-0 flex flex-col justify-center px-6 sm:px-12 md:px-24 text-white">
-                      <span className="text-xs sm:text-sm text-accent font-bold uppercase tracking-widest mb-3 sm:mb-5">
-                        {format(eventDate, 'MMMM yyyy')}
-                      </span>
-                      <h2 className="text-2xl sm:text-4xl md:text-6xl font-serif font-bold mb-4 sm:mb-6 max-w-4xl leading-tight">
-                        {event.title}
-                      </h2>
-                      <p className="text-sm sm:text-lg md:text-xl text-stone-200 max-w-3xl leading-relaxed mb-6 sm:mb-10 line-clamp-3">
-                        {event.description}
-                      </p>
-                      <div className="flex flex-wrap items-center gap-3 sm:gap-6 text-xs sm:text-sm font-bold uppercase tracking-widest mb-6 sm:mb-10 text-stone-200">
-                        <span className="px-3 py-2 bg-white/10 border border-white/15">{format(eventDate, 'EEE, MMM d')}</span>
-                        <span className="px-3 py-2 bg-white/10 border border-white/15">{event.event_time}</span>
-                        <span className="px-3 py-2 bg-white/10 border border-white/15">{event.location}</span>
-                      </div>
-                      <Link
-                        to={`/events/${event.id}`}
-                        className="inline-flex items-center gap-2 bg-white text-primary px-6 py-2 sm:px-8 sm:py-3 font-bold hover:bg-accent hover:text-white transition-all w-fit text-sm sm:text-base"
-                      >
-                        View Details <ArrowRight className="w-4 h-4 sm:w-5 h-5" />
-                      </Link>
-                    </div>
-                  </div>
-                );
-              })}
-            </motion.div>
-          </div>
+          )}
         </section>
       )}
 
       {/* Pastor's Welcome Section - Full Width 50/50 */}
-      <section className="w-full overflow-hidden bg-white">
+      <section style={builderStyle('pastor')} className="w-full overflow-hidden bg-white">
         <div className="flex flex-col lg:flex-row lg:items-start">
           <div className="hidden lg:block lg:w-1/2 relative">
             {settings?.pastor_image_url ? (
@@ -665,8 +697,65 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Latest Updates */}
+      <section style={builderStyle('latest')} id="latest" className="w-full px-4 sm:px-8 md:px-16 border-t-2 border-stone-200 py-16 sm:py-24 bg-primary text-white">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-10 sm:mb-14">
+          <div className="max-w-2xl">
+            <h2 className="text-3xl sm:text-5xl font-serif font-bold mb-4 sm:mb-6 text-white">Latest Updates</h2>
+            <p className="text-lg sm:text-xl text-stone-300 font-light">Articles, devotionals, sermons, and events from our ministry.</p>
+          </div>
+        </div>
+
+        <div className="-mx-4 sm:-mx-8 md:-mx-16">
+          {latestSlides.length === 0 ? (
+            <div className="bg-white/5 border-y border-white/10 p-10 text-stone-300">No content yet.</div>
+          ) : (
+            <div className="relative min-h-[420px] overflow-hidden bg-primary text-white shadow-2xl sm:min-h-[520px]">
+              <AnimatePresence mode="wait">
+                <motion.img
+                  key={latestSlides[Math.min(latestIndex, latestSlides.length - 1)]!.imageUrl}
+                  initial={{ opacity: 0, scale: 1.03 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 1.01 }}
+                  transition={{ duration: 0.9 }}
+                  src={latestSlides[Math.min(latestIndex, latestSlides.length - 1)]!.imageUrl}
+                  alt=""
+                  className="absolute inset-0 h-full w-full object-cover opacity-30"
+                  referrerPolicy="no-referrer"
+                />
+              </AnimatePresence>
+              <div className="absolute inset-0 bg-gradient-to-r from-primary via-primary/75 to-primary/30" />
+              <div className="absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-primary via-primary/70 to-transparent" />
+
+              <div className="relative flex min-h-[420px] flex-col justify-between gap-10 px-6 py-10 sm:min-h-[520px] sm:px-10 sm:py-14 md:px-16">
+                <div className="max-w-4xl space-y-5">
+                  <div className="inline-flex items-center gap-3 text-xs font-bold uppercase tracking-widest">
+                    <span className="border border-accent/20 bg-accent/20 px-4 py-2 text-accent">{latestSlides[latestIndex]!.badge}</span>
+                    <span className="border border-white/15 bg-white/10 px-4 py-2">Latest</span>
+                  </div>
+                  <h3 className="line-clamp-2 break-words text-3xl font-serif font-bold leading-tight sm:text-5xl">{latestSlides[latestIndex]!.title}</h3>
+                  <p className="line-clamp-3 max-w-3xl text-base font-light leading-relaxed text-white/80 sm:text-lg">{latestSlides[latestIndex]!.subtitle}</p>
+                </div>
+
+                <div className="flex items-end justify-between gap-6 flex-wrap">
+                  <Link to={latestSlides[latestIndex]!.href} className="inline-flex min-h-12 items-center gap-3 bg-white px-8 py-4 text-xs font-bold uppercase tracking-widest text-primary hover:bg-white/90">
+                    <Play className="w-4 h-4" /> Open <ArrowRight className="w-4 h-4" />
+                  </Link>
+                </div>
+
+                {latestSlides.length > 1 ? (
+                  <div className="flex items-center gap-2 pt-2">
+                    {latestSlides.map((_, i) => <div key={i} className={`h-2 rounded-full transition-all ${i === latestIndex ? 'w-10 bg-accent' : 'w-2 bg-white/30'}`} aria-hidden="true" />)}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+
       {/* Leadership Section - Meet the Team */}
-      <section className="bg-white py-12 sm:py-28">
+      <section style={builderStyle('leadership')} className="bg-white py-12 sm:py-28">
         <div className="w-full px-4 sm:px-8 md:px-16">
           <div className="text-center max-w-4xl mx-auto mb-10 sm:mb-16 space-y-4 sm:space-y-6">
             <div className="inline-block bg-primary text-white px-4 py-1.5 sm:px-6 sm:py-2 text-xs sm:text-sm font-bold uppercase tracking-widest">
@@ -739,7 +828,7 @@ export default function Home() {
       </section>
 
       {/* What We Are */}
-      <section id="identity" className="w-full bg-white border-t-2 border-stone-200">
+      <section style={builderStyle('identity')} id="identity" className="w-full bg-white border-t-2 border-stone-200">
         <motion.div
           initial={{ opacity: 0, x: -30 }}
           whileInView={{ opacity: 1, x: 0 }}
@@ -788,82 +877,8 @@ export default function Home() {
         </motion.div>
       </section>
 
-      {/* Latest Updates */}
-      <section id="latest" className="w-full px-4 sm:px-8 md:px-16 border-t-2 border-stone-200 py-16 sm:py-24 bg-primary text-white">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-10 sm:mb-14">
-          <div className="max-w-2xl">
-            <h2 className="text-3xl sm:text-5xl font-serif font-bold mb-4 sm:mb-6 text-white">Latest Updates</h2>
-            <p className="text-lg sm:text-xl text-stone-300 font-light">
-              Articles, devotionals, sermons, and events from our ministry.
-            </p>
-          </div>
-        </div>
-
-        <div className="-mx-4 sm:-mx-8 md:-mx-16">
-          {latestSlides.length === 0 ? (
-            <div className="bg-white/5 border-y border-white/10 p-10 text-stone-300">No content yet.</div>
-          ) : (
-            <div className="relative overflow-hidden bg-primary text-white shadow-2xl min-h-[72vh]">
-              <AnimatePresence mode="wait">
-                <motion.img
-                  key={latestSlides[Math.min(latestIndex, latestSlides.length - 1)]!.imageUrl}
-                  initial={{ opacity: 0, scale: 1.03 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 1.01 }}
-                  transition={{ duration: 0.9 }}
-                  src={latestSlides[Math.min(latestIndex, latestSlides.length - 1)]!.imageUrl}
-                  alt=""
-                  className="absolute inset-0 w-full h-full object-cover opacity-30"
-                  referrerPolicy="no-referrer"
-                />
-              </AnimatePresence>
-              <div className="absolute inset-0 bg-gradient-to-r from-primary via-primary/75 to-primary/30" />
-              <div className="absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-primary via-primary/70 to-transparent" />
-
-              <div className="relative px-6 sm:px-10 md:px-16 py-10 sm:py-14 h-full min-h-[72vh] flex flex-col justify-between gap-10">
-                <div className="space-y-5">
-                  <div className="inline-flex items-center gap-3 text-xs font-bold uppercase tracking-widest">
-                    <span className="px-4 py-2 bg-accent/20 text-accent border border-accent/20">{latestSlides[latestIndex]!.badge}</span>
-                    <span className="px-4 py-2 bg-white/10 border border-white/15">Latest</span>
-                  </div>
-                  <h3 className="text-4xl sm:text-6xl font-serif font-bold leading-tight tracking-tight">
-                    {latestSlides[latestIndex]!.title}
-                  </h3>
-                  <p className="text-white/80 text-lg sm:text-xl font-light leading-relaxed max-w-3xl">
-                    {latestSlides[latestIndex]!.subtitle}
-                  </p>
-                </div>
-
-                <div className="flex items-end justify-between gap-6 flex-wrap">
-                  <Link
-                    to={latestSlides[latestIndex]!.href}
-                    className="inline-flex items-center gap-3 px-8 py-4 bg-white text-primary font-bold uppercase tracking-widest text-xs hover:bg-white/90 transition-all"
-                  >
-                    <Play className="w-4 h-4" />
-                    Open
-                    <ArrowRight className="w-4 h-4" />
-                  </Link>
-                </div>
-
-                {latestSlides.length > 1 ? (
-                  <div className="flex items-center gap-2 pt-6">
-                    {latestSlides.map((_, i) => (
-                      <div
-                        key={i}
-                        className={`h-2 rounded-full transition-all ${i === latestIndex ? 'w-10 bg-accent' : 'w-2 bg-white/30'}`}
-                        aria-hidden="true"
-                      />
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
-
       {/* Service Times */}
-      <section className="w-full bg-primary text-white border-t-2 border-stone-200">
+      <section style={builderStyle('services')} className="w-full bg-primary text-white border-t-2 border-stone-200">
         <div className="w-full px-4 sm:px-8 md:px-16 py-12 sm:py-20 md:py-24">
           <div className="max-w-4xl mx-auto">
             <div className="flex items-center gap-4 mb-8 sm:mb-12">
@@ -890,7 +905,7 @@ export default function Home() {
       </section>
 
       {/* Gallery (by section) */}
-      <section id="gallery" className="w-full px-4 sm:px-8 md:px-16 py-16 sm:py-24 bg-cream border-t border-stone-200">
+      <section style={builderStyle('gallery')} id="gallery" className="w-full px-4 sm:px-8 md:px-16 py-16 sm:py-24 bg-cream border-t border-stone-200">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-12 sm:mb-16">
           <div className="max-w-2xl">
             <h2 className="text-3xl sm:text-5xl font-serif font-bold mb-4 sm:mb-6 text-primary">Gallery</h2>
@@ -899,7 +914,9 @@ export default function Home() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2 sm:gap-4 w-full md:w-auto">
+            {settings?.gallery_page_enabled ? (
             <Link to="/gallery" className="flex-1 md:flex-none text-center text-xs sm:text-sm font-bold px-4 sm:px-8 py-2 sm:py-3 border border-stone-200 hover:bg-stone-50 transition-colors text-primary bg-white shadow-sm">View gallery</Link>
+            ) : null}
           </div>
         </div>
 
@@ -911,9 +928,9 @@ export default function Home() {
                   <h3 className="text-2xl sm:text-3xl font-serif font-bold text-primary">{section}</h3>
                   <p className="text-xs font-bold uppercase tracking-widest text-stone-400">{items.length} photos</p>
                 </div>
-                <Link to="/gallery" className="text-xs font-bold uppercase tracking-widest text-accent hover:underline">
+                {settings?.gallery_page_enabled ? <Link to="/gallery" className="text-xs font-bold uppercase tracking-widest text-accent hover:underline">
                   See all
-                </Link>
+                </Link> : null}
               </div>
 
               <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2">
@@ -933,7 +950,7 @@ export default function Home() {
       </section>
 
       {/* Testimonials Section - Spread Wide */}
-      <section className="w-full px-8 md:px-16 py-32 bg-primary text-white overflow-hidden relative">
+      <section style={builderStyle('testimonials')} className="w-full px-8 md:px-16 py-32 bg-primary text-white overflow-hidden relative">
         <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
           <Quote className="absolute -top-20 -left-20 w-[600px] h-[600px] text-white" />
         </div>
@@ -975,7 +992,7 @@ export default function Home() {
       </section>
 
       {/* Spiritual Support & Giving - Spread Wide */}
-      <section id="support-giving" className="w-full px-8 md:px-16 py-32 bg-stone-50/50 border-t-2 border-stone-200">
+      <section style={builderStyle('support')} id="support-giving" className="w-full px-8 md:px-16 py-32 bg-stone-50/50 border-t-2 border-stone-200">
         <div className="text-center max-w-4xl mx-auto mb-20">
           <div className="inline-block bg-accent/10 text-accent px-6 py-2 text-sm font-bold uppercase tracking-widest mb-6">
             Spiritual Care & Stewardship
@@ -1038,7 +1055,7 @@ export default function Home() {
       </section>
 
       {/* Departments Section - Spread Wide */}
-      <section id="departments" className="w-full px-8 md:px-16 py-32 bg-white border-t-2 border-stone-200">
+      <section style={builderStyle('departments')} id="departments" className="w-full px-8 md:px-16 py-32 bg-white border-t-2 border-stone-200">
         <div className="text-center max-w-4xl mx-auto mb-20">
           <div className="inline-block bg-primary/10 text-primary px-6 py-2 text-sm font-bold uppercase tracking-widest mb-6">
             Get Involved
@@ -1204,72 +1221,8 @@ export default function Home() {
         ) : null}
       </Modal>
 
-      {/* Upcoming Events Section - Spread Wide */}
-      <section id="events-grid" className="w-full px-8 md:px-16 py-32 bg-white border-t-2 border-stone-200">
-        <div className="flex flex-col md:flex-row justify-between items-end mb-20 gap-8">
-          <div className="max-w-3xl">
-            <div className="inline-block bg-accent/10 text-accent px-6 py-2 text-sm font-bold uppercase tracking-widest mb-6">
-              What's Happening
-            </div>
-            <h2 className="text-5xl md:text-8xl font-serif font-bold text-primary">Upcoming Events</h2>
-            <p className="text-2xl text-stone-500 mt-6 font-light">Stay updated with the events happening this month and tap any card for more details.</p>
-          </div>
-          <Link to="/events" className="flex items-center gap-3 text-primary font-bold hover:text-accent transition-colors uppercase tracking-[0.3em] text-sm">
-            View all events <ArrowRight className="w-6 h-6" />
-          </Link>
-        </div>
-
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-10">
-          {visibleEvents.slice(0, 4).map((event, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.1 }}
-              className="bg-stone-50 border border-stone-100 hover:border-accent/30 transition-all hover:bg-white hover:shadow-xl group overflow-hidden flex flex-col"
-            >
-              <div className="h-48 overflow-hidden relative">
-                <img 
-                  src={event.image_url || "https://images.unsplash.com/photo-1438029071396-1e831a7fa6d8?auto=format&fit=crop&q=80"} 
-                  alt={event.title}
-                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                  referrerPolicy="no-referrer"
-                />
-                <div className="absolute top-4 left-4 w-16 h-16 bg-white flex flex-col items-center justify-center shadow-lg group-hover:bg-accent group-hover:text-white transition-colors">
-                  <span className="text-2xl font-bold leading-none">{new Date(event.event_date).getDate()}</span>
-                  <span className="text-[10px] uppercase tracking-widest font-bold mt-1">{format(new Date(event.event_date), 'MMM')}</span>
-                </div>
-              </div>
-              <div className="p-10 flex-1 flex flex-col">
-                <h3 className="text-2xl font-bold text-primary mb-6 group-hover:text-accent transition-colors leading-tight line-clamp-2">{event.title}</h3>
-                <div className="space-y-4 text-sm text-stone-500 font-light mb-8">
-                  <div className="flex items-center gap-3">
-                    <Clock className="w-4 h-4 text-accent" />
-                    <span>{event.event_time}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <MapPin className="w-4 h-4 text-accent" />
-                    <span className="line-clamp-1">{event.location}</span>
-                  </div>
-                </div>
-                <Link 
-                  to={`/events/${event.id}`}
-                  className="mt-auto inline-flex items-center gap-2 text-accent font-bold uppercase tracking-widest text-xs hover:underline"
-                >
-                  View Details <ArrowRight className="w-4 h-4" />
-                </Link>
-              </div>
-            </motion.div>
-          ))}
-          {(visibleEvents.length === 0) ? (
-            <p className="text-stone-400 italic col-span-full text-center py-12">No events have been added yet.</p>
-          ) : null}
-        </div>
-      </section>
-
       {/* Ready to Visit? Section - Full Width 50/50 */}
-      <section className="w-full border-t-2 border-stone-200">
+      <section style={builderStyle('visit')} className="w-full border-t-2 border-stone-200">
         <div className="flex flex-col lg:grid lg:grid-cols-2">
           <div className="bg-primary p-12 md:p-24 space-y-12 relative overflow-hidden">
             <div className="relative z-10 space-y-8">
@@ -1354,7 +1307,7 @@ export default function Home() {
       </section>
 
       {/* Newsletter Section - Spread Wide */}
-      <section className="w-full px-8 md:px-16 py-20 bg-stone-50 border-t-2 border-stone-200">
+      <section style={builderStyle('newsletter')} className="w-full px-8 md:px-16 py-20 bg-stone-50 border-t-2 border-stone-200">
         <div className="bg-white p-8 md:p-16 border border-stone-100 shadow-sm relative overflow-hidden">
           <div className="relative z-10 max-w-3xl mx-auto text-center space-y-8">
             <div className="w-20 h-20 bg-accent/10 flex items-center justify-center mx-auto">
@@ -1397,6 +1350,42 @@ export default function Home() {
           <div className="absolute bottom-0 right-0 w-48 h-48 bg-primary/5 rounded-full blur-3xl -mr-24 -mb-24" />
         </div>
       </section>
+
+      {customBuilderSections.map((section) => {
+        const spacing =
+          section.settings?.spacing === 'compact'
+            ? 'py-10'
+            : section.settings?.spacing === 'spacious'
+              ? 'py-28'
+              : 'py-16';
+        const maxWidth =
+          section.settings?.maxWidth === 'narrow'
+            ? 'max-w-3xl'
+            : section.settings?.maxWidth === 'standard'
+              ? 'max-w-5xl'
+              : 'max-w-7xl';
+        const centered = section.settings?.textAlign === 'center';
+        return (
+          <section key={section.id} style={customBuilderStyle(section)} className={`w-full px-8 md:px-16 ${spacing} border-t border-stone-200`}>
+            <div className={`${maxWidth} mx-auto ${centered ? 'text-center' : 'text-left'}`}>
+              {section.settings?.title ? (
+                <h2 className="text-4xl md:text-6xl font-serif font-bold text-primary">{section.settings.title}</h2>
+              ) : null}
+              {section.settings?.subtitle ? (
+                <p className={`mt-5 text-xl leading-relaxed text-stone-500 ${centered ? 'mx-auto max-w-3xl' : 'max-w-3xl'}`}>
+                  {section.settings.subtitle}
+                </p>
+              ) : null}
+              {section.settings?.customHtml ? (
+                <div
+                  className="prose prose-stone mt-8 max-w-none"
+                  dangerouslySetInnerHTML={{ __html: section.settings.customHtml }}
+                />
+              ) : null}
+            </div>
+          </section>
+        );
+      })}
 
       {/* Modals */}
       <Modal 

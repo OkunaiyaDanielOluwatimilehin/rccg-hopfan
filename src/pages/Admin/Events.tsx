@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Calendar, Edit2, Loader2, Plus, Save, Search, Trash2 } from 'lucide-react';
+import { Calendar, Edit2, Loader2, Plus, Save, Search, Trash2, Upload } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
-import { ChurchEvent } from '../../types';
+import { ChurchEvent, CustomForm } from '../../types';
 import { isMissingColumnError } from '../../lib/requestSchema';
+import { uploadToSupabasePublicBucket } from '../../services/uploadService';
 
 const initialFormData = {
   title: '',
@@ -15,10 +16,12 @@ const initialFormData = {
   location: '',
   category: '',
   image_url: '',
+  form_id: '',
 };
 
 export default function AdminEvents() {
   const [events, setEvents] = useState<ChurchEvent[]>([]);
+  const [forms, setForms] = useState<CustomForm[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -27,9 +30,14 @@ export default function AdminEvents() {
   const [visibilityMode, setVisibilityMode] = useState<'published' | 'scheduled' | 'draft'>('published');
   const [actionLoading, setActionLoading] = useState<'draft' | 'published' | 'scheduled' | null>(null);
   const [formData, setFormData] = useState(initialFormData);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     fetchEvents();
+    supabase.from('custom_forms').select('id,title,status').order('title').then(({ data, error }) => {
+      if (error) console.error('Forms load error:', error);
+      setForms((data || []) as CustomForm[]);
+    });
   }, []);
 
   async function fetchEvents() {
@@ -69,6 +77,7 @@ export default function AdminEvents() {
         location: event.location || '',
         category: event.category || '',
         image_url: event.image_url || '',
+        form_id: event.form_id || '',
       });
       setVisibilityMode(event.status === 'draft' ? 'draft' : effectiveDate && new Date(effectiveDate) > new Date() ? 'scheduled' : 'published');
     } else {
@@ -89,6 +98,7 @@ export default function AdminEvents() {
       const eventStatus = effectiveMode === 'draft' ? 'draft' : 'published';
       const payload = {
         ...formData,
+        form_id: formData.form_id || null,
         published_at: eventStatus === 'draft' ? null : publishAt || nowIso,
         status: eventStatus,
         updated_at: nowIso,
@@ -105,7 +115,7 @@ export default function AdminEvents() {
       setIsModalOpen(false);
     } catch (error) {
       console.error('Error saving event:', error);
-      alert('Failed to save event');
+      alert((error as { message?: string })?.message || 'Failed to save event');
     } finally {
       setSaving(false);
       setActionLoading(null);
@@ -115,6 +125,27 @@ export default function AdminEvents() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await saveEvent();
+  };
+
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploadingImage(true);
+    try {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const imageUrl = await uploadToSupabasePublicBucket({
+        bucket: 'site-images',
+        objectPath: `events/${Date.now()}-${safeName}`,
+        file,
+      });
+      setFormData((current) => ({ ...current, image_url: imageUrl }));
+    } catch (error) {
+      console.error('Event image upload error:', error);
+      alert('Failed to upload event image.');
+    } finally {
+      setUploadingImage(false);
+      event.target.value = '';
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -273,15 +304,24 @@ export default function AdminEvents() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Image URL</label>
-                <input
-                  type="url"
-                  value={formData.image_url}
-                  onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
-                  className="w-full px-6 py-4 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-accent transition-all"
-                  placeholder="https://..."
-                />
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Event Image</label>
+                  <label className="flex min-h-32 cursor-pointer items-center justify-center border border-dashed border-stone-300 bg-stone-50 p-5 text-sm font-bold text-primary hover:border-accent">
+                    {uploadingImage ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
+                    <span className="ml-2">{uploadingImage ? 'Uploading...' : 'Upload image'}</span>
+                    <input type="file" accept="image/*" className="sr-only" onChange={handleImageUpload} disabled={uploadingImage} />
+                  </label>
+                  {formData.image_url ? <img src={formData.image_url} alt="Event preview" className="h-40 w-full object-cover" referrerPolicy="no-referrer" /> : null}
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Registration Form</label>
+                  <select value={formData.form_id} onChange={(event) => setFormData({ ...formData, form_id: event.target.value })} className="w-full px-6 py-4 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-accent transition-all">
+                    <option value="">No form</option>
+                    {forms.filter((form) => form.status === 'published').map((form) => <option key={form.id} value={form.id}>{form.title}</option>)}
+                  </select>
+                  <p className="text-xs leading-relaxed text-stone-500">Selected form appears on event page for registration.</p>
+                </div>
               </div>
 
               <div className="flex justify-end gap-4 pt-6">

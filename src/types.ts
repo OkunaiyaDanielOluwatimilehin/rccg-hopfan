@@ -104,6 +104,7 @@ export interface SiteSettings {
   google_maps_url?: string;
   social_links?: SocialLink[];
   page_header_images?: Record<string, string>;
+  gallery_page_enabled?: boolean;
   giving_bank_name?: string;
   giving_account_name?: string;
   giving_account_number?: string;
@@ -117,6 +118,9 @@ export interface SiteSettings {
   ui_font?: string;
   heading_font?: string;
   editorial_font?: string;
+  primary_color?: string;
+  accent_color?: string;
+  cream_color?: string;
   featured_department_ids?: string[];
   featured_department_columns?: number;
   featured_department_rows?: number;
@@ -208,6 +212,19 @@ export interface CustomFormField {
   type: CustomFormFieldType;
   required?: boolean;
   options?: string[];
+  showWhen?: { fieldId: string; equals: string };
+}
+
+export interface FormAssignmentColor {
+  name: string;
+  hex: string;
+  group_url?: string;
+}
+
+export interface FormColorAssignment {
+  enabled: boolean;
+  capacity_per_color: number;
+  colors: FormAssignmentColor[];
 }
 
 export interface CustomForm {
@@ -346,6 +363,7 @@ export interface ChurchEvent {
   location: string;
   category: string;
   image_url?: string;
+  form_id?: string | null;
   created_at: string;
 }
 

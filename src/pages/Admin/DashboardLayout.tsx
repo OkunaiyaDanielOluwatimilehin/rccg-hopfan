@@ -21,6 +21,7 @@ import {
   ChevronsRight,
   Menu,
   X,
+  LayoutTemplate,
 } from 'lucide-react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
@@ -34,6 +35,7 @@ export default function AdminDashboard() {
   const { user, loading, signOut } = useAuth();
   const [role, setRole] = useState<AdminRole>('member');
   const [rolePermissions, setRolePermissions] = useState<RolePermissions | null>(null);
+  const [homepageEditorMode, setHomepageEditorMode] = useState<'settings' | 'builder'>('settings');
   const [isAllowedUser, setIsAllowedUser] = useState(false);
   const [checkingAdmin, setCheckingAdmin] = useState(true);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -43,6 +45,7 @@ export default function AdminDashboard() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [openSidebarGroups, setOpenSidebarGroups] = useState({
     core: true,
+    builder: true,
     requests: true,
     department: true,
     content: true,
@@ -69,6 +72,7 @@ export default function AdminDashboard() {
 
   const menuItems = [
     { name: 'Overview', path: '/admin', icon: LayoutDashboard, section: 'overview' as const },
+    { name: 'Builder', path: '/admin/builder', icon: LayoutTemplate, section: 'settings' as const },
     { name: 'Analytics', path: '/admin/analytics', icon: BarChart3, section: 'analytics' as const },
     { name: 'Notifications', path: '/admin/notifications', icon: Bell, section: 'notifications' as const },
     { name: 'Users', path: '/admin/users', icon: Users, section: 'users' as const },
@@ -105,6 +109,16 @@ export default function AdminDashboard() {
       navigate(getFirstAllowedPath(role, rolePermissions), { replace: true });
     }
   }, [user, loading, checkingAdmin, isAllowedUser, location.pathname, role, rolePermissions, navigate]);
+
+  useEffect(() => {
+    if (!user || loading || checkingAdmin || !isAllowedUser) return;
+    if (homepageEditorMode === 'builder' && location.pathname.startsWith('/admin/settings')) {
+      navigate('/admin/builder', { replace: true });
+    }
+    if (homepageEditorMode === 'settings' && location.pathname.startsWith('/admin/builder')) {
+      navigate('/admin/settings', { replace: true });
+    }
+  }, [user, loading, checkingAdmin, isAllowedUser, homepageEditorMode, location.pathname, navigate]);
 
   useEffect(() => {
     const loadAvatar = async () => {
@@ -181,6 +195,9 @@ export default function AdminDashboard() {
       }
 
       const permissions = (settingsRes.data as any)?.role_permissions || null;
+      const savedMode = (settingsRes.data as any)?.homepage_editor_mode;
+      const localMode = typeof window !== 'undefined' ? window.localStorage.getItem('homepage_editor_mode') : null;
+      setHomepageEditorMode(savedMode === 'builder' || (!savedMode && localMode === 'builder') ? 'builder' : 'settings');
       setRole(normalizedRole);
       setRolePermissions(permissions);
       setIsAllowedUser(true);
@@ -203,10 +220,24 @@ export default function AdminDashboard() {
   };
 
   const matchesNavSearch = (name: string) => name.toLowerCase().includes(navSearch.trim().toLowerCase());
+  const switchHomepageEditorMode = async (mode: 'settings' | 'builder') => {
+    if (mode === homepageEditorMode) return;
+    setHomepageEditorMode(mode);
+    window.localStorage.setItem('homepage_editor_mode', mode);
+    navigate(mode === 'builder' ? '/admin/builder' : '/admin/settings');
+    const { error } = await supabase.from('site_settings').upsert({ id: 'site_settings', homepage_editor_mode: mode }, { onConflict: 'id' });
+    if (error) {
+      console.error('Homepage editor mode save error:', error);
+      return;
+    }
+  };
   const visibleMenuItems = menuItems.filter((item) => canAccessSection(role, item.section, rolePermissions) && matchesNavSearch(item.name));
   const visibleContentItems = contentItems.filter((item) => canAccessSection(role, item.section, rolePermissions) && matchesNavSearch(item.name));
-  const visibleSettingsItems = settingsItems.filter((item) => canAccessSection(role, item.section, rolePermissions) && matchesNavSearch(item.name));
+  const visibleSettingsItems = homepageEditorMode === 'settings'
+    ? settingsItems.filter((item) => canAccessSection(role, item.section, rolePermissions) && matchesNavSearch(item.name))
+    : [];
   const coreItems = visibleMenuItems.filter((item) => ['overview', 'analytics', 'notifications', 'users'].includes(item.section));
+  const builderItems = homepageEditorMode === 'builder' ? visibleMenuItems.filter((item) => item.path === '/admin/builder') : [];
   const requestItems = visibleMenuItems.filter((item) => ['prayer_requests', 'counseling_requests', 'follow_up'].includes(item.section));
   const departmentItems = visibleMenuItems.filter((item) => ['department_requests'].includes(item.section));
   const contentNavItems = visibleContentItems;
@@ -216,6 +247,7 @@ export default function AdminDashboard() {
     setOpenSidebarGroups((prev) => ({
       ...prev,
       core: prev.core || coreItems.some((item) => isActive(item.path)),
+      builder: prev.builder || builderItems.some((item) => isActive(item.path)),
       requests: prev.requests || requestItems.some((item) => isActive(item.path)),
       department: prev.department || departmentItems.some((item) => isActive(item.path)),
       content: prev.content || contentNavItems.some((item) => isActive(item.path)),
@@ -347,6 +379,40 @@ export default function AdminDashboard() {
             </div>
           ) : null}
 
+          {builderItems.length > 0 ? (
+            <div className="space-y-1 pt-4 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => toggleSidebarGroup('builder')}
+                className="w-full px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.3em] text-stone-400 flex items-center justify-between hover:text-stone-200 transition-colors"
+              >
+                <span className="admin-sidebar-group-label">Website</span>
+                <ChevronRight className={`w-3.5 h-3.5 transition-transform ${openSidebarGroups.builder ? 'rotate-90' : ''}`} />
+              </button>
+              {openSidebarGroups.builder
+                ? builderItems.map((item) => {
+                    const active = isActive(item.path);
+                    return (
+                      <Link
+                        key={item.path}
+                        to={item.path}
+                        title={item.name}
+                        className={`flex items-center justify-between rounded-xl px-4 py-2.5 text-sm font-medium transition-all group ${
+                          active ? 'bg-white/10 text-white' : 'text-stone-300 hover:bg-white/10'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <item.icon className={`w-4 h-4 transition-colors ${active ? 'text-white' : 'text-stone-400 group-hover:text-white'}`} />
+                          <span className="admin-sidebar-text text-sm">{item.name}</span>
+                        </div>
+                        {active && <ChevronRight className="w-4 h-4" />}
+                      </Link>
+                    );
+                  })
+                : null}
+            </div>
+          ) : null}
+
           {requestItems.length > 0 ? (
             <div className="space-y-1 pt-4 border-t border-white/10">
               <button
@@ -458,6 +524,20 @@ export default function AdminDashboard() {
                     );
                   })
                 : null}
+            </div>
+          ) : null}
+
+          {canAccessSection(role, 'settings', rolePermissions) ? (
+            <div className="space-y-1 pt-4 border-t border-white/10">
+              <p className="px-4 pb-2 text-[10px] font-bold uppercase tracking-[0.3em] text-stone-400">Website Mode</p>
+              <div className="grid grid-cols-2 gap-1 px-4">
+                <button type="button" onClick={() => switchHomepageEditorMode('settings')} className={`px-2 py-2 text-[10px] font-bold uppercase tracking-wider ${homepageEditorMode === 'settings' ? 'bg-white text-primary' : 'text-stone-300 hover:bg-white/10'}`}>
+                  Settings
+                </button>
+                <button type="button" onClick={() => switchHomepageEditorMode('builder')} className={`px-2 py-2 text-[10px] font-bold uppercase tracking-wider ${homepageEditorMode === 'builder' ? 'bg-white text-primary' : 'text-stone-300 hover:bg-white/10'}`}>
+                  Builder
+                </button>
+              </div>
             </div>
           ) : null}
 

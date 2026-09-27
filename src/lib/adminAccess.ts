@@ -214,6 +214,9 @@ export function resolveAdminSection(pathname: string): AdminSection | null {
   if (pathname.startsWith('/admin/events')) return 'events';
   if (pathname.startsWith('/admin/testimonials')) return 'testimonials';
   if (pathname.startsWith('/admin/users')) return 'users';
+  if (pathname.startsWith('/admin/page-builder')) return 'settings';
+  if (pathname.startsWith('/admin/visual-editor')) return 'settings';
+  if (pathname.startsWith('/admin/builder')) return 'settings';
   if (pathname.startsWith('/admin/settings')) return 'settings';
   if (pathname.startsWith('/admin/notifications')) return 'notifications';
   if (pathname.startsWith('/admin/analytics')) return 'analytics';

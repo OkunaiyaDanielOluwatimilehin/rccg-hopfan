@@ -74,7 +74,7 @@ export default function EventInterestModal({ event, isOpen, onClose, onSubmitted
           </div>
         ) : null}
 
-        <div className="grid md:grid-cols-2 gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase tracking-widest text-stone-400">Full Name</label>
             <div className="relative">
@@ -82,7 +82,7 @@ export default function EventInterestModal({ event, isOpen, onClose, onSubmitted
               <input
                 value={form.full_name}
                 onChange={(e) => setForm((prev) => ({ ...prev, full_name: e.target.value }))}
-                className="w-full pl-11 pr-4 py-4 bg-stone-50 border border-stone-200 focus:outline-none focus:ring-4 focus:ring-accent/10 focus:border-accent transition-all"
+                className="w-full min-w-0 pl-11 pr-4 py-3 sm:py-4 bg-stone-50 border border-stone-200 focus:outline-none focus:ring-4 focus:ring-accent/10 focus:border-accent transition-all"
                 placeholder="Your full name"
               />
             </div>
@@ -96,7 +96,7 @@ export default function EventInterestModal({ event, isOpen, onClose, onSubmitted
                 required
                 value={form.email}
                 onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
-                className="w-full pl-11 pr-4 py-4 bg-stone-50 border border-stone-200 focus:outline-none focus:ring-4 focus:ring-accent/10 focus:border-accent transition-all"
+                className="w-full min-w-0 pl-11 pr-4 py-3 sm:py-4 bg-stone-50 border border-stone-200 focus:outline-none focus:ring-4 focus:ring-accent/10 focus:border-accent transition-all"
                 placeholder="you@example.com"
               />
             </div>
@@ -110,7 +110,7 @@ export default function EventInterestModal({ event, isOpen, onClose, onSubmitted
             <input
               value={form.phone}
               onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
-              className="w-full pl-11 pr-4 py-4 bg-stone-50 border border-stone-200 focus:outline-none focus:ring-4 focus:ring-accent/10 focus:border-accent transition-all"
+              className="w-full min-w-0 pl-11 pr-4 py-3 sm:py-4 bg-stone-50 border border-stone-200 focus:outline-none focus:ring-4 focus:ring-accent/10 focus:border-accent transition-all"
               placeholder="+234..."
             />
           </div>
@@ -122,13 +122,13 @@ export default function EventInterestModal({ event, isOpen, onClose, onSubmitted
             value={form.notes}
             onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
             rows={4}
-            className="w-full p-4 bg-stone-50 border border-stone-200 focus:outline-none focus:ring-4 focus:ring-accent/10 focus:border-accent transition-all resize-none"
+            className="w-full min-w-0 p-3 sm:p-4 bg-stone-50 border border-stone-200 focus:outline-none focus:ring-4 focus:ring-accent/10 focus:border-accent transition-all resize-none"
             placeholder="Anything we should know?"
           />
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between pt-2">
-          <p className="text-xs text-stone-400">
+        <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs leading-relaxed text-stone-400">
             By submitting, you agree we can contact you about this event.
           </p>
           <button

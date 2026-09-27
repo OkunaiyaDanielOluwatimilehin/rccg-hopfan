@@ -1,10 +1,11 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import ScrollToTop from './components/ScrollToTop';
 import Layout from './components/Layout';
 import SiteSettingsApplier from './components/SiteSettingsApplier';
 import { NotificationProvider } from './components/NotificationToasts';
+import { supabase } from './lib/supabase';
 
 const Home = lazy(() => import('./pages/Home'));
 const About = lazy(() => import('./pages/About'));
@@ -44,10 +45,23 @@ const Newcomers = lazy(() => import('./pages/Newcomers'));
 const AdminNewcomers = lazy(() => import('./pages/Admin/Newcomers'));
 const AdminNewcomerResponses = lazy(() => import('./pages/Admin/NewcomerResponses'));
 const AdminAnalytics = lazy(() => import('./pages/Admin/Analytics'));
+const AdminPageBuilder = lazy(() => import('./pages/Admin/PageBuilder'));
 
 function NewsRedirect() {
   const { slug } = useParams();
   return <Navigate to={slug ? `/editorial/${slug}` : '/editorial'} replace />;
+}
+
+function GalleryPageRoute() {
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    supabase.from('site_settings').select('gallery_page_enabled').eq('id', 'site_settings').maybeSingle()
+      .then(({ data, error }) => setEnabled(!error && Boolean(data?.gallery_page_enabled)));
+  }, []);
+
+  if (enabled === null) return <div className="min-h-screen bg-stone-50 px-6 py-12 text-stone-500">Loading...</div>;
+  return enabled ? <Gallery /> : <Navigate to="/" replace />;
 }
 
 export default function App() {
@@ -63,7 +77,7 @@ export default function App() {
             <Route path="/" element={<Layout />}>
               <Route index element={<Home />} />
               <Route path="about" element={<About />} />
-              <Route path="gallery" element={<Gallery />} />
+              <Route path="gallery" element={<GalleryPageRoute />} />
               <Route path="serve" element={<Navigate to="/about" replace />} />
               <Route path="contact" element={<Navigate to="/about#get-in-touch" replace />} />
               <Route path="sermons" element={<Sermons />} />
@@ -82,8 +96,8 @@ export default function App() {
               <Route path="profile" element={<Profile />} />
               <Route path="playlists" element={<Playlists />} />
               <Route path="playlists/:id" element={<PlaylistDetail />} />
-              <Route path="forms/:slug" element={<FormPage />} />
             </Route>
+            <Route path="forms/:slug" element={<FormPage />} />
             <Route path="/newcomers" element={<Newcomers />} />
 
             {/* Admin Routes */}
@@ -102,6 +116,9 @@ export default function App() {
               <Route path="users" element={<AdminUsers />} />
               <Route path="notifications" element={<AdminNotifications />} />
               <Route path="analytics" element={<AdminAnalytics />} />
+              <Route path="builder" element={<AdminPageBuilder />} />
+              <Route path="page-builder" element={<Navigate to="/admin/builder" replace />} />
+              <Route path="visual-editor" element={<Navigate to="/admin/builder" replace />} />
               <Route path="prayer-requests" element={<AdminPrayerRequests />} />
               <Route path="counseling-requests" element={<AdminCounselingRequests />} />
               <Route path="follow-up" element={<AdminFollowUp />} />

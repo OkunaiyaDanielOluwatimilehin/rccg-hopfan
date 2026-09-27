@@ -2679,6 +2679,27 @@ export default function AdminSettings() {
                 }}
                 className="w-full text-base text-stone-600 outline-none border-b border-transparent focus:border-accent bg-transparent"
               />
+              <div className="grid gap-3 border-t border-stone-200 pt-4 sm:grid-cols-3">
+                <label className="space-y-1 text-xs font-bold uppercase tracking-widest text-stone-500">
+                  Department Head
+                  <select value={dept.head_profile_id || ''} onChange={(e) => setDepartments((current) => current.map((item) => item.id === dept.id ? { ...item, head_profile_id: e.target.value || null } : item))} className="w-full border border-stone-200 bg-white p-2 text-sm font-normal normal-case tracking-normal">
+                    <option value="">Not assigned</option>
+                    {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name || profile.email || profile.id}</option>)}
+                  </select>
+                </label>
+                <label className="space-y-1 text-xs font-bold uppercase tracking-widest text-stone-500">
+                  Department Admins
+                  <select multiple value={dept.admin_profile_ids || []} onChange={(e) => setDepartments((current) => current.map((item) => item.id === dept.id ? { ...item, admin_profile_ids: Array.from(e.target.selectedOptions, (option) => option.value) } : item))} className="h-28 w-full border border-stone-200 bg-white p-2 text-sm font-normal normal-case tracking-normal">
+                    {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name || profile.email || profile.id}</option>)}
+                  </select>
+                </label>
+                <label className="space-y-1 text-xs font-bold uppercase tracking-widest text-stone-500">
+                  Department Members
+                  <select multiple value={dept.member_profile_ids || []} onChange={(e) => setDepartments((current) => current.map((item) => item.id === dept.id ? { ...item, member_profile_ids: Array.from(e.target.selectedOptions, (option) => option.value) } : item))} className="h-28 w-full border border-stone-200 bg-white p-2 text-sm font-normal normal-case tracking-normal">
+                    {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name || profile.email || profile.id}</option>)}
+                  </select>
+                </label>
+              </div>
             </div>
           ))}
         </div>
@@ -2893,6 +2914,7 @@ export default function AdminSettings() {
                 ['prayer', 'Prayer'],
                 ['counselor', 'Counselor'],
                 ['follow_up', 'Follow Up'],
+                ['department_admin', 'Department Admin'],
                 ['member', 'Member'],
               ] as Array<[AdminRole, string]>).map(([role, label]) => (
                 <tr key={role} className="hover:bg-stone-50/70">

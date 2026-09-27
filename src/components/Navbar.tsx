@@ -15,6 +15,7 @@ export default function Navbar() {
   const navigate = useNavigate();
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [profileRole, setProfileRole] = useState<string | null>(null);
+  const [galleryPageEnabled, setGalleryPageEnabled] = useState(false);
   const [notifications, setNotifications] = useState<Array<{
     id: string;
     title: string;
@@ -48,6 +49,13 @@ export default function Navbar() {
     { name: 'Gallery', path: '/gallery' },
     { name: 'About', path: '/about' },
   ];
+  const visibleNavGroups = navGroups.filter((item) => item.path !== '/gallery' || galleryPageEnabled);
+
+  useEffect(() => {
+    supabase.from('site_settings').select('gallery_page_enabled').eq('id', 'site_settings').maybeSingle().then(({ data, error }) => {
+      if (!error) setGalleryPageEnabled(Boolean(data?.gallery_page_enabled));
+    });
+  }, []);
 
   const initials = useMemo(() => {
     const email = (user?.email || '').trim();
@@ -253,7 +261,7 @@ export default function Navbar() {
 
           {/* Desktop Links */}
           <div className="hidden md:flex min-w-0 items-center gap-3 lg:gap-4 xl:gap-5">
-            {navGroups.map((item) => {
+            {visibleNavGroups.map((item) => {
               const isActive = isSamePath(item.path);
               return (
                 <Link
@@ -427,7 +435,7 @@ export default function Navbar() {
             className="md:hidden bg-white border-b border-stone-200 overflow-hidden"
           >
           <div className="px-4 pt-2 pb-6 space-y-1">
-              {navGroups.map((group) => {
+              {visibleNavGroups.map((group) => {
                 const active = isSamePath(group.path);
                 return (
                   <Link

@@ -59,7 +59,7 @@ export default function Layout() {
                 <li><Link to="/sermons" className="hover:text-accent transition-colors">Sermons</Link></li>
                 <li><Link to="/contact" className="hover:text-accent transition-colors">Contact Us</Link></li>
                 <li><Link to="/events" className="hover:text-accent transition-colors">Upcoming Events</Link></li>
-                <li><Link to="/gallery" className="hover:text-accent transition-colors">Gallery</Link></li>
+                {settings?.gallery_page_enabled ? <li><Link to="/gallery" className="hover:text-accent transition-colors">Gallery</Link></li> : null}
               </ul>
             </div>
 
@@ -96,7 +96,7 @@ export default function Layout() {
             <p>&copy; {new Date().getFullYear()} RCCG HOPFAN. All rights reserved.</p>
             <div className="flex flex-wrap justify-center gap-4 sm:gap-6">
               <Link to="/editorial" className="hover:text-white transition-colors">Editorial</Link>
-              <Link to="/gallery" className="hover:text-white transition-colors">Gallery</Link>
+              {settings?.gallery_page_enabled ? <Link to="/gallery" className="hover:text-white transition-colors">Gallery</Link> : null}
               <Link to="/events" className="hover:text-white transition-colors">Events</Link>
               <Link to={{ pathname: '/', hash: '#support-giving' }} className="hover:text-white transition-colors">Support & Giving</Link>
             </div>

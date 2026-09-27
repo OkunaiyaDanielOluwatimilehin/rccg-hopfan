@@ -22,6 +22,8 @@ import MarkdownContent from '../components/MarkdownContent';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
+const RELATED_PAGE_SIZE = 6;
+
 export default function Devotionals() {
   const { user } = useAuth();
   const [devotional, setDevotional] = useState<Devotional | null>(null);
@@ -33,6 +35,7 @@ export default function Devotionals() {
   const [commentSending, setCommentSending] = useState(false);
   const [commentDeletingId, setCommentDeletingId] = useState<string | null>(null);
   const [relatedDevotionals, setRelatedDevotionals] = useState<Devotional[]>([]);
+  const [relatedPage, setRelatedPage] = useState(1);
 
   const fetchDevotional = async (date: Date) => {
     setLoading(true);
@@ -75,7 +78,7 @@ export default function Devotionals() {
             .lte('published_at', nowIso)
             .neq('id', devotional.id)
             .order('published_at', { ascending: false })
-            .limit(3),
+            .limit(60),
         ]);
 
         if (!commentsRes.error) setComments((commentsRes.data || []) as DevotionalComment[]);
@@ -88,6 +91,13 @@ export default function Devotionals() {
     };
 
     loadReaderData();
+  }, [devotional?.id]);
+
+  const relatedPageCount = Math.max(1, Math.ceil(relatedDevotionals.length / RELATED_PAGE_SIZE));
+  const visibleRelatedDevotionals = relatedDevotionals.slice((relatedPage - 1) * RELATED_PAGE_SIZE, relatedPage * RELATED_PAGE_SIZE);
+
+  useEffect(() => {
+    setRelatedPage(1);
   }, [devotional?.id]);
 
   const handleNextDay = () => setCurrentDate((prev) => addDays(prev, 1));
@@ -375,19 +385,32 @@ export default function Devotionals() {
                   </div>
 
                   {relatedDevotionals.length > 0 ? (
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {relatedDevotionals.map((item) => (
-                        <article key={item.id} className="border border-stone-100 bg-stone-50/40 hover:bg-white hover:border-accent/30 transition-all overflow-hidden rounded-2xl">
-                          <div className="p-5 space-y-3">
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-accent">
-                              {item.date ? format(new Date(item.date), 'MMM d, yyyy') : 'Devotional'}
-                            </p>
-                            <h4 className="text-lg font-serif font-bold text-primary line-clamp-2">{item.title}</h4>
-                            <p className="text-sm text-stone-500 line-clamp-3">{item.scripture_reference || item.author || 'Daily devotional'}</p>
-                          </div>
-                        </article>
-                      ))}
-                    </div>
+                    <>
+                      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {visibleRelatedDevotionals.map((item) => (
+                          <article key={item.id} className="border border-stone-100 bg-stone-50/40 hover:bg-white hover:border-accent/30 transition-all overflow-hidden rounded-2xl">
+                            <div className="p-5 space-y-3">
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-accent">
+                                {item.date ? format(new Date(item.date), 'MMM d, yyyy') : 'Devotional'}
+                              </p>
+                              <h4 className="text-lg font-serif font-bold text-primary line-clamp-2">{item.title}</h4>
+                              <p className="text-sm text-stone-500 line-clamp-3">{item.scripture_reference || item.author || 'Daily devotional'}</p>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                      {relatedDevotionals.length > RELATED_PAGE_SIZE ? (
+                        <div className="flex items-center justify-center gap-3 pt-2">
+                          <button type="button" onClick={() => setRelatedPage((value) => Math.max(1, value - 1))} disabled={relatedPage === 1} className="inline-flex items-center gap-2 border border-stone-200 bg-white px-4 py-3 text-xs font-bold uppercase tracking-widest text-primary disabled:opacity-40">
+                            <ChevronLeft className="w-4 h-4" /> Prev
+                          </button>
+                          <span className="text-xs font-bold uppercase tracking-widest text-stone-500">Page {relatedPage} / {relatedPageCount}</span>
+                          <button type="button" onClick={() => setRelatedPage((value) => Math.min(relatedPageCount, value + 1))} disabled={relatedPage === relatedPageCount} className="inline-flex items-center gap-2 border border-stone-200 bg-white px-4 py-3 text-xs font-bold uppercase tracking-widest text-primary disabled:opacity-40">
+                            Next <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : null}
+                    </>
                   ) : (
                     <p className="text-stone-500">No related devotionals found yet.</p>
                   )}

@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Archive, Loader2, Mail, ShieldAlert, UserCheck, Users } from 'lucide-react';
+import { Archive, FileText, Loader2, Mail, ShieldAlert, Trash2, UserCheck, Users } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../../lib/supabase';
-import { ChurchEvent, Newcomer } from '../../types';
+import { ChurchEvent, CustomForm, CustomFormEntry, Newcomer } from '../../types';
 import { buildFollowUpArchiveUpdate, buildFollowUpAssignmentUpdate } from '../../lib/followUpLogic';
 
 type EventInterest = {
@@ -53,6 +53,8 @@ export default function AdminFollowUp() {
   const [visits, setVisits] = useState<VisitRequest[]>([]);
   const [events, setEvents] = useState<ChurchEvent[]>([]);
   const [newConverts, setNewConverts] = useState<NewConvert[]>([]);
+  const [formEntries, setFormEntries] = useState<CustomFormEntry[]>([]);
+  const [forms, setForms] = useState<CustomForm[]>([]);
   const [followUpMembers, setFollowUpMembers] = useState<FollowUpProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -66,16 +68,18 @@ export default function AdminFollowUp() {
     setLoading(true);
     setError(null);
     try {
-      const [interestsRes, subscribersRes, eventsRes, visitsRes, newcomersRes, membersRes] = await Promise.all([
+      const [interestsRes, subscribersRes, eventsRes, visitsRes, newcomersRes, membersRes, entriesRes, formsRes] = await Promise.all([
         supabase.from('event_interests').select('*').order('created_at', { ascending: false }),
         supabase.from('newsletter_subscriptions').select('*').order('created_at', { ascending: false }),
         supabase.from('events').select('id,title,event_date').order('event_date', { ascending: false }),
         supabase.from('visit_requests').select('*').order('created_at', { ascending: false }),
         supabase.from('newcomers').select('*').is('archived_at', null).order('created_at', { ascending: false }),
-        supabase.from('profiles').select('id,full_name,email').in('role', ['admin', 'follow_up']).order('full_name', { ascending: true }),
+        supabase.from('profiles').select('id,full_name,email').in('role', ['admin', 'follow_up', 'department_admin']).order('full_name', { ascending: true }),
+        supabase.from('custom_form_entries').select('*').order('created_at', { ascending: false }).limit(100),
+        supabase.from('custom_forms').select('id,title,fields').order('updated_at', { ascending: false }),
       ]);
 
-      const firstError = interestsRes.error || subscribersRes.error || eventsRes.error || visitsRes.error || newcomersRes.error || membersRes.error;
+      const firstError = interestsRes.error || subscribersRes.error || eventsRes.error || visitsRes.error || newcomersRes.error || membersRes.error || entriesRes.error || formsRes.error;
       if (firstError) throw firstError;
 
       setInterests((interestsRes.data || []) as EventInterest[]);
@@ -83,6 +87,8 @@ export default function AdminFollowUp() {
       setEvents((eventsRes.data || []) as ChurchEvent[]);
       setVisits((visitsRes.data || []) as VisitRequest[]);
       setNewConverts((newcomersRes.data || []) as NewConvert[]);
+      setFormEntries((entriesRes.data || []) as CustomFormEntry[]);
+      setForms((formsRes.data || []) as CustomForm[]);
       setFollowUpMembers((membersRes.data || []) as FollowUpProfile[]);
     } catch (err: any) {
       console.error('Error fetching follow up data:', err);
@@ -92,6 +98,8 @@ export default function AdminFollowUp() {
       setEvents([]);
       setVisits([]);
       setNewConverts([]);
+      setFormEntries([]);
+      setForms([]);
       setFollowUpMembers([]);
     } finally {
       setLoading(false);
@@ -101,6 +109,7 @@ export default function AdminFollowUp() {
   const eventTitleById = useMemo(() => {
     return new Map(events.map((event) => [event.id, event.title]));
   }, [events]);
+  const formById = useMemo(() => new Map(forms.map((form) => [form.id, form])), [forms]);
 
   async function assignFollowUp(convert: NewConvert, memberId: string) {
     const member = followUpMembers.find((item) => item.id === memberId);
@@ -154,6 +163,38 @@ export default function AdminFollowUp() {
     } catch (archiveError: any) {
       console.error('Error archiving follow-up:', archiveError);
       setError(archiveError?.message || 'Could not archive follow-up.');
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function deleteFollowUp(convert: NewConvert) {
+    if (!window.confirm('Delete this follow-up response permanently?')) return;
+    setSavingId(`newcomer:${convert.id}`);
+    setError(null);
+    try {
+      const { error: deleteError } = await supabase.from('newcomers').delete().eq('id', convert.id);
+      if (deleteError) throw deleteError;
+      setNewConverts((current) => current.filter((item) => item.id !== convert.id));
+    } catch (deleteError: any) {
+      console.error('Error deleting follow-up:', deleteError);
+      setError(deleteError?.message || 'Could not delete follow-up response.');
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function deleteFormEntry(entry: CustomFormEntry) {
+    if (!window.confirm('Delete this form response permanently?')) return;
+    setSavingId(`form:${entry.id}`);
+    setError(null);
+    try {
+      const { error: deleteError } = await supabase.from('custom_form_entries').delete().eq('id', entry.id);
+      if (deleteError) throw deleteError;
+      setFormEntries((current) => current.filter((item) => item.id !== entry.id));
+    } catch (deleteError: any) {
+      console.error('Error deleting form entry:', deleteError);
+      setError(deleteError?.message || 'Could not delete form response.');
     } finally {
       setSavingId(null);
     }
@@ -240,15 +281,79 @@ export default function AdminFollowUp() {
                     <button
                       type="button"
                       onClick={() => archiveFollowUp(convert)}
-                      disabled={savingId === convert.id}
+                      disabled={savingId === convert.id || savingId === `newcomer:${convert.id}`}
                       className="inline-flex items-center gap-2 border border-stone-200 px-4 py-3 text-xs font-bold uppercase tracking-widest text-stone-600 hover:border-primary hover:text-primary disabled:opacity-60"
                     >
                       <Archive className="w-4 h-4" />
                       Archive Complete
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteFollowUp(convert)}
+                      disabled={savingId === convert.id || savingId === `newcomer:${convert.id}`}
+                      className="inline-flex items-center gap-2 border border-rose-200 px-4 py-3 text-xs font-bold uppercase tracking-widest text-rose-700 hover:border-rose-500 disabled:opacity-60"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete
+                    </button>
                     {convert.assigned_follow_up_name ? (
                       <span className="text-sm text-stone-500">Assigned to {convert.assigned_follow_up_name}</span>
                     ) : null}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="bg-white border border-stone-200 shadow-sm">
+        <div className="p-6 border-b border-stone-100 flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3">
+            <FileText className="w-5 h-5 text-accent" />
+            <h2 className="font-serif text-2xl font-bold text-primary">Form Submissions</h2>
+          </div>
+          <button type="button" onClick={fetchData} className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-widest bg-primary text-white hover:bg-primary/90 transition-colors" disabled={loading}>
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            Refresh
+          </button>
+        </div>
+        {loading ? (
+          <div className="p-8 text-stone-500">Loading form submissions...</div>
+        ) : formEntries.length === 0 ? (
+          <div className="p-8 text-stone-500">No form submissions yet.</div>
+        ) : (
+          <div className="divide-y divide-stone-100">
+            {formEntries.map((entry) => {
+              const form = formById.get(entry.form_id);
+              const fields = form?.fields || [];
+              return (
+                <article key={entry.id} className="p-6 space-y-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <h3 className="text-lg font-bold text-primary">{form?.title || 'Form submission'}</h3>
+                    <div className="flex items-center gap-3">
+                      <p className="text-xs text-stone-400">{entry.created_at ? format(new Date(entry.created_at), 'PPP p') : 'Unknown time'}</p>
+                      <button
+                        type="button"
+                        onClick={() => deleteFormEntry(entry)}
+                        disabled={savingId === `form:${entry.id}`}
+                        className="inline-flex items-center gap-2 border border-rose-200 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-rose-700 hover:border-rose-500 disabled:opacity-60"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {fields.map((field) => {
+                      const value = (entry.values as any)?.[field.id];
+                      return (
+                        <div key={field.id} className="border border-stone-100 bg-stone-50 p-3">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400">{field.label}</p>
+                          <p className="mt-1 whitespace-pre-wrap break-words text-sm text-stone-700">{Array.isArray(value) ? value.join(', ') : String(value ?? '')}</p>
+                        </div>
+                      );
+                    })}
                   </div>
                 </article>
               );
