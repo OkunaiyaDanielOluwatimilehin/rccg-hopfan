@@ -11,6 +11,7 @@ import AudioPlayer from '../components/AudioPlayer';
 import MarkdownContent from '../components/MarkdownContent';
 import Seo from '../components/Seo';
 import { dismissAccountPrompt, recordContentActivity, recordDownload, shouldShowAccountPrompt, upsertWatchProgress } from '../services/engagementService';
+import { buildShareUrl } from '../lib/shareUrl';
 
 function resolveVideoEmbedUrl(value?: string | null) {
   const raw = String(value || '').trim();
@@ -58,7 +59,7 @@ export default function SermonDetail() {
   const { user } = useAuth();
   const videoEmbedUrl = useMemo(() => resolveVideoEmbedUrl(sermon?.video_url), [sermon?.video_url]);
 
-  const shareUrl = useMemo(() => (typeof window !== 'undefined' ? window.location.href : ''), []);
+  const shareUrl = sermon ? buildShareUrl('sermon', sermon.title, sermon.id) : '';
   const availableTabs = useMemo(
     () =>
       [

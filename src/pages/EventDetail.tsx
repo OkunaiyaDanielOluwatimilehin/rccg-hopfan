@@ -7,6 +7,7 @@ import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import Seo from '../components/Seo';
 import EventInterestModal from '../components/EventInterestModal';
+import { buildShareUrl } from '../lib/shareUrl';
 
 const EventDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -16,7 +17,7 @@ const EventDetail: React.FC = () => {
   const [formLoading, setFormLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [interestedOpen, setInterestedOpen] = useState(false);
-  const shareUrl = useMemo(() => (typeof window !== 'undefined' && id ? `${window.location.origin}/api/event-share/${encodeURIComponent(id)}` : ''), [id]);
+  const shareUrl = useMemo(() => event ? buildShareUrl('event', event.title, event.id) : '', [event]);
 
   useEffect(() => {
     const fetchEvent = async () => {

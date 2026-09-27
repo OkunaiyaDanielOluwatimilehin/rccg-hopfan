@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase';
 import MarkdownContent from '../components/MarkdownContent';
 import Seo from '../components/Seo';
 import { useAuth } from '../contexts/AuthContext';
+import { buildShareUrl } from '../lib/shareUrl';
 
 export default function PostDetail() {
   const { slug } = useParams();
@@ -24,7 +25,7 @@ export default function PostDetail() {
   const isHidden = !post || post.status !== 'published' || (!!post.published_at && new Date(post.published_at) > new Date());
   const handleShare = async () => {
     if (!post) return;
-    const url = typeof window !== 'undefined' ? window.location.href : '';
+    const url = buildShareUrl('article', post.title, post.id, post.slug);
     const text = `${post.title} - RCCG HOPFAN Editorial`;
     try {
       if (navigator.share) {

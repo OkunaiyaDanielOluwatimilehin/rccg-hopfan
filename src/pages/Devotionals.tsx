@@ -21,13 +21,18 @@ import Seo from '../components/Seo';
 import MarkdownContent from '../components/MarkdownContent';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { buildShareUrl } from '../lib/shareUrl';
 
 const RELATED_PAGE_SIZE = 6;
 
 export default function Devotionals() {
   const { user } = useAuth();
   const [devotional, setDevotional] = useState<Devotional | null>(null);
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [currentDate, setCurrentDate] = useState(() => {
+    const requestedDate = new URLSearchParams(window.location.search).get('date');
+    const parsedDate = requestedDate ? new Date(`${requestedDate}T12:00:00`) : new Date();
+    return Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
+  });
   const [loading, setLoading] = useState(true);
   const [comments, setComments] = useState<DevotionalComment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
@@ -105,7 +110,7 @@ export default function Devotionals() {
 
   const handleShare = async () => {
     if (!devotional) return;
-    const url = typeof window !== 'undefined' ? window.location.href : '';
+    const url = buildShareUrl('devotional', devotional.title, devotional.id);
     const text = `${devotional.title}${devotional.scripture_reference ? ` - ${devotional.scripture_reference}` : ''}`;
 
     try {
