@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, Copy, Download, Eye, Loader2, Palette, Plus, Save, Share2, Trash2, Upload, X } from 'lucide-react';
+import { Copy, Download, Eye, ListChecks, Loader2, Palette, Plus, Save, Share2, Trash2, Upload, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { CustomForm, CustomFormEntry, CustomFormField, CustomFormFieldType, FormColorAssignment } from '../../types';
 import { uploadToSupabasePublicBucket } from '../../services/uploadService';
+import { buildShareUrl } from '../../lib/shareUrl';
 
 const fieldTypes: CustomFormFieldType[] = ['short_text', 'long_text', 'email', 'phone', 'number', 'date', 'select', 'checkbox'];
-const ENTRY_PAGE_SIZE = 25;
 
 const slugify = (value: string) =>
   value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || `form-${Date.now()}`;
@@ -41,10 +41,6 @@ const youthHangoutFields: CustomFormField[] = [
 export default function AdminForms() {
   const [forms, setForms] = useState<CustomForm[]>([]);
   const [entries, setEntries] = useState<Record<string, number>>({});
-  const [activeEntries, setActiveEntries] = useState<CustomFormEntry[]>([]);
-  const [activeEntryCount, setActiveEntryCount] = useState(0);
-  const [activeEntriesPage, setActiveEntriesPage] = useState(1);
-  const [activeEntriesLoading, setActiveEntriesLoading] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploadingHeader, setUploadingHeader] = useState(false);
@@ -55,37 +51,6 @@ export default function AdminForms() {
     loadForms();
   }, []);
 
-  useEffect(() => {
-    if (!active?.id) {
-      setActiveEntries([]);
-      setActiveEntryCount(0);
-      setActiveEntriesLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setActiveEntriesLoading(true);
-    supabase
-      .from('custom_form_entries')
-      .select('*', { count: 'exact' })
-      .eq('form_id', active.id)
-      .order('created_at', { ascending: false })
-      .range((activeEntriesPage - 1) * ENTRY_PAGE_SIZE, activeEntriesPage * ENTRY_PAGE_SIZE - 1)
-      .then(({ data, error, count }) => {
-        if (cancelled) return;
-        if (error) console.error('Form entries load error:', error);
-        const loaded = (data || []) as CustomFormEntry[];
-        setActiveEntries(loaded);
-        setActiveEntryCount(count || 0);
-        setEntries((current) => ({ ...current, [active.id]: count || 0 }));
-        const lastPage = Math.max(1, Math.ceil((count || 0) / ENTRY_PAGE_SIZE));
-        if (count !== null && activeEntriesPage > lastPage) setActiveEntriesPage(lastPage);
-      })
-      .finally(() => {
-        if (!cancelled) setActiveEntriesLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [active?.id, activeEntriesPage]);
-
   async function loadForms() {
     const { data, error } = await supabase.from('custom_forms').select('*').order('updated_at', { ascending: false });
     if (error) {
@@ -95,7 +60,6 @@ export default function AdminForms() {
     const rows = (data || []) as CustomForm[];
     setForms(rows);
     setActiveId(rows[0]?.id || null);
-    setActiveEntriesPage(1);
 
     const counts = await Promise.all(rows.map(async (form) => {
       const { count } = await supabase.from('custom_form_entries').select('id', { count: 'exact', head: true }).eq('form_id', form.id);
@@ -174,7 +138,7 @@ export default function AdminForms() {
       alert('Publish form before sharing.');
       return;
     }
-    const url = new URL(`/forms/${form.slug}`, window.location.origin).toString();
+    const url = buildShareUrl('form', form.title, form.id, form.slug, form.header_image_url || undefined);
     try {
       if (navigator.share) {
         await navigator.share({ title: form.title, text: form.description || '', url });
@@ -208,7 +172,6 @@ export default function AdminForms() {
     }
     setForms((prev) => [data as CustomForm, ...prev]);
     setActiveId((data as CustomForm).id);
-    setActiveEntriesPage(1);
   }
 
   async function addYouthHangoutForm() {
@@ -231,7 +194,6 @@ export default function AdminForms() {
     }
     setForms((prev) => [data as CustomForm, ...prev]);
     setActiveId((data as CustomForm).id);
-    setActiveEntriesPage(1);
   }
 
   function patchColorAssignment(patch: Partial<FormColorAssignment>) {
@@ -375,6 +337,10 @@ export default function AdminForms() {
 
             <input value={active.title} onChange={(e) => patchActive({ title: e.target.value, slug: slugify(e.target.value) })} className="w-full border border-stone-200 p-4 text-2xl font-bold outline-none" />
             <textarea value={active.description || ''} onChange={(e) => patchActive({ description: e.target.value })} className="w-full border border-stone-200 p-4 outline-none" rows={3} placeholder="Form description" />
+            <section className="space-y-3">
+              <h2 className="text-lg font-bold text-primary">Completion Message</h2>
+              <textarea value={active.style?.completion_greeting || ''} onChange={(e) => patchActive({ style: { ...active.style, completion_greeting: e.target.value } })} className="w-full border border-stone-200 p-4 outline-none" rows={3} placeholder="Add greeting" aria-label="Completion greeting" />
+            </section>
             <div className="grid gap-3 sm:grid-cols-2">
               <input value={active.slug} onChange={(e) => patchActive({ slug: slugify(e.target.value) })} className="border border-stone-200 p-3 outline-none" />
               <select value={active.status} onChange={(e) => patchActive({ status: e.target.value as CustomForm['status'] })} className="border border-stone-200 p-3 outline-none">
@@ -392,12 +358,13 @@ export default function AdminForms() {
                     <input type="number" min={1} max={500} value={(active.style?.color_assignment as FormColorAssignment).capacity_per_color} onChange={(e) => patchColorAssignment({ capacity_per_color: Math.max(1, Number(e.target.value) || 1) })} className="w-20 border border-stone-200 p-2" />
                   </label>
                 </div>
-                <p className="text-sm text-stone-500">Each registrant gets one available color. Add each group’s invite link to show a join button after the wheel stops.</p>
+                <p className="text-sm text-stone-500">Visitors tap wheel before submitting. Their spun color gets saved if space remains. Add group invite links here.</p>
                 <div className="space-y-2">
                   {((active.style?.color_assignment as FormColorAssignment).colors || youthColors).map((color, index) => (
-                    <div key={color.name} className="grid gap-2 sm:grid-cols-[3rem_8rem_1fr]">
+                    <div key={color.name} className="grid gap-2 sm:grid-cols-[3rem_7rem_1fr_1fr]">
                       <input type="color" aria-label={`${color.name} group color`} value={color.hex} onChange={(e) => patchAssignmentColor(index, { hex: e.target.value })} className="h-11 w-12 border border-stone-200 p-1" />
                       <input aria-label="Group name" value={color.name} onChange={(e) => patchAssignmentColor(index, { name: e.target.value })} className="border border-stone-200 p-2" />
+                      <input aria-label={`${color.name} group button text`} value={color.group_link_label || ''} onChange={(e) => patchAssignmentColor(index, { group_link_label: e.target.value })} placeholder="WhatsApp button text" className="min-w-0 border border-stone-200 p-2" />
                       <input aria-label={`${color.name} group invite link`} value={color.group_url || ''} onChange={(e) => patchAssignmentColor(index, { group_url: e.target.value })} placeholder="Group invite link (optional)" className="min-w-0 border border-stone-200 p-2" />
                     </div>
                   ))}
@@ -483,46 +450,9 @@ export default function AdminForms() {
             </div>
 
             <div className="border-t border-stone-200 pt-6 space-y-4">
-              <h2 className="text-xl font-bold text-primary">Entries</h2>
-              {activeEntriesLoading ? (
-                <p className="text-stone-500">Loading entries...</p>
-              ) : activeEntryCount === 0 ? (
-                <p className="text-stone-500">No entries yet.</p>
-              ) : (
-                <div className="space-y-3">
-                  <p className="text-sm text-stone-500">Showing {(activeEntriesPage - 1) * ENTRY_PAGE_SIZE + 1}–{Math.min(activeEntriesPage * ENTRY_PAGE_SIZE, activeEntryCount)} of {activeEntryCount} entries</p>
-                  {activeEntries.map((entry) => (
-                    <div key={entry.id} className="border border-stone-200 p-4 bg-white">
-                      <p className="text-xs font-bold uppercase tracking-widest text-stone-400 mb-3">{new Date(entry.created_at).toLocaleString()}</p>
-                      {(entry.values as any)?._assigned_color ? (
-                        <div className="mb-3 inline-flex items-center gap-2 border border-stone-200 px-3 py-1.5 text-sm font-bold" style={{ color: (entry.values as any)._assigned_color_hex || undefined }}>
-                          <span className="h-3 w-3 rounded-full border border-black/10" style={{ backgroundColor: (entry.values as any)._assigned_color_hex }} />
-                          {(entry.values as any)._assigned_color} group
-                        </div>
-                      ) : null}
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        {active.fields.map((field) => (
-                          <div key={field.id}>
-                            <p className="text-xs font-bold uppercase tracking-widest text-stone-400">{field.label}</p>
-                            <p className="text-sm text-stone-700 break-words">{String((entry.values as any)?.[field.id] ?? '')}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                  {activeEntryCount > ENTRY_PAGE_SIZE ? (
-                    <div className="flex items-center justify-center gap-3 pt-2">
-                      <button type="button" onClick={() => setActiveEntriesPage((page) => Math.max(1, page - 1))} disabled={activeEntriesPage === 1 || activeEntriesLoading} className="inline-flex items-center gap-2 border border-stone-200 bg-white px-4 py-3 text-xs font-bold uppercase tracking-widest text-primary disabled:opacity-40">
-                        <ChevronLeft className="h-4 w-4" /> Prev
-                      </button>
-                      <span className="text-xs font-bold uppercase tracking-widest text-stone-500">Page {activeEntriesPage} / {Math.ceil(activeEntryCount / ENTRY_PAGE_SIZE)}</span>
-                      <button type="button" onClick={() => setActiveEntriesPage((page) => Math.min(Math.ceil(activeEntryCount / ENTRY_PAGE_SIZE), page + 1))} disabled={activeEntriesPage >= Math.ceil(activeEntryCount / ENTRY_PAGE_SIZE) || activeEntriesLoading} className="inline-flex items-center gap-2 border border-stone-200 bg-white px-4 py-3 text-xs font-bold uppercase tracking-widest text-primary disabled:opacity-40">
-                        Next <ChevronRight className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-              )}
+              <h2 className="text-xl font-bold text-primary">Responses</h2>
+              <p className="text-stone-500">View entries in separate spreadsheet workspace.</p>
+              <Link to="/admin/forms/responses" className="inline-flex items-center gap-2 border border-stone-200 px-4 py-3 text-sm font-bold text-primary"><ListChecks className="h-4 w-4" /> Open form responses</Link>
             </div>
           </section>
         ) : (

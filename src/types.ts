@@ -219,12 +219,19 @@ export interface FormAssignmentColor {
   name: string;
   hex: string;
   group_url?: string;
+  group_link_label?: string;
 }
 
 export interface FormColorAssignment {
   enabled: boolean;
   capacity_per_color: number;
   colors: FormAssignmentColor[];
+}
+
+export interface FormStyle {
+  color_assignment?: FormColorAssignment;
+  completion_greeting?: string;
+  response_message?: string;
 }
 
 export interface CustomForm {
@@ -238,7 +245,7 @@ export interface CustomForm {
   theme_color?: string | null;
   accent_color?: string | null;
   background_color?: string | null;
-  style?: Record<string, unknown> | null;
+  style?: FormStyle | null;
   created_at?: string;
   updated_at?: string;
 }

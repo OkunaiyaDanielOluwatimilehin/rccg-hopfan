@@ -75,7 +75,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissions = {
     follow_up: false,
     department_requests: false,
     departments: false,
-    forms: false,
+    forms: true,
     newcomers: false,
   },
   counselor: {
@@ -244,7 +244,7 @@ export function getFirstAllowedPath(role: AdminRole | string | null | undefined,
       case 'counselor':
         return ['counseling_requests', 'notifications', 'follow_up', 'department_requests', 'overview'];
       case 'follow_up':
-        return ['follow_up', 'newcomers', 'notifications', 'department_requests', 'overview'];
+        return ['follow_up', 'forms', 'newcomers', 'notifications', 'department_requests', 'overview'];
       case 'department_admin':
         return ['department_requests', 'departments', 'notifications', 'overview'];
       default:

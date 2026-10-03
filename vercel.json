@@ -1,24 +1,10 @@
 {
-  "rewrites": [
-    {
-      "source": "/event/:key",
-      "destination": "/api/share-event/:key"
-    },
-    {
-      "source": "/article/:key",
-      "destination": "/api/share-article/:key"
-    },
-    {
-      "source": "/sermon/:key",
-      "destination": "/api/share-sermon/:key"
-    },
-    {
-      "source": "/devotional/:key",
-      "destination": "/api/share-devotional/:key"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+  "routes": [
+    { "src": "/event/(.*)", "dest": "/api/share/event/$1" },
+    { "src": "/article/(.*)", "dest": "/api/share/article/$1" },
+    { "src": "/sermon/(.*)", "dest": "/api/share/sermon/$1" },
+    { "src": "/devotional/(.*)", "dest": "/api/share/devotional/$1" },
+    { "handle": "filesystem" },
+    { "src": "/((?!api/).*)", "dest": "/index.html" }
   ]
 }

@@ -15,6 +15,9 @@ export default function FormPage() {
   const [sent, setSent] = useState(false);
   const [assignmentResult, setAssignmentResult] = useState<{ assigned_color: string; assigned_color_hex: string; assigned_group_url: string; group_size: number } | null>(null);
   const [wheelRotation, setWheelRotation] = useState(0);
+  const [spunColor, setSpunColor] = useState<FormColorAssignment['colors'][number] | null>(null);
+  const [spinning, setSpinning] = useState(false);
+  const [wheelOpen, setWheelOpen] = useState(false);
 
   useEffect(() => {
     if (!slug || (preview && authLoading)) return;
@@ -30,6 +33,24 @@ export default function FormPage() {
     });
   }, [slug, preview, authLoading]);
 
+  function spinWheel() {
+    const colors = (form?.style?.color_assignment as FormColorAssignment | undefined)?.colors || [];
+    if (!colors.length || spinning) return;
+    const index = Math.floor(Math.random() * colors.length);
+    const slice = 360 / colors.length;
+    setSpinning(true);
+    setSpunColor(null);
+    setWheelRotation((current) => current + 1800 + (360 - (index * slice + slice / 2)));
+    window.setTimeout(() => {
+      setSpunColor(colors[index]);
+      setSpinning(false);
+      window.setTimeout(() => {
+        setWheelOpen(false);
+        (document.getElementById('custom-form') as HTMLFormElement | null)?.requestSubmit();
+      }, 1200);
+    }, 4200);
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!form) return;
@@ -43,15 +64,19 @@ export default function FormPage() {
     }
     const colorAssignment = form.style?.color_assignment as FormColorAssignment | undefined;
     if (colorAssignment?.enabled) {
-      const { data, error } = await supabase.rpc('submit_custom_form_entry', { p_form_id: form.id, p_values: values });
+      if (!spunColor) {
+        setWheelOpen(true);
+        return;
+      }
+      if (spinning) {
+        return;
+      }
+      const { data, error } = await supabase.rpc('submit_custom_form_entry', { p_form_id: form.id, p_values: values, p_selected_color: spunColor.name });
       if (error) {
         alert(error.message || 'Failed to submit form.');
         return;
       }
       setAssignmentResult(data as typeof assignmentResult);
-      const index = colorAssignment.colors.findIndex((color) => color.name === data.assigned_color);
-      const slice = 360 / colorAssignment.colors.length;
-      setTimeout(() => setWheelRotation(1800 + ((360 - (index * slice + slice / 2)) % 360)), 80);
     } else {
       const { error } = await supabase.from('custom_form_entries').insert({
         form_id: form.id,
@@ -71,6 +96,7 @@ export default function FormPage() {
   const themeColor = form.theme_color || '#173b2f';
   const accentColor = form.accent_color || '#c59b45';
   const backgroundColor = form.background_color || '#f8f7f4';
+  const colorAssignment = form.style?.color_assignment as FormColorAssignment | undefined;
 
   return (
     <div className="min-h-screen px-3 py-6 sm:px-4 sm:py-12" style={{ backgroundColor }}>
@@ -79,32 +105,23 @@ export default function FormPage() {
           <img src={form.header_image_url} alt="" className="h-40 w-full object-cover sm:h-56" referrerPolicy="no-referrer" />
         ) : null}
         <div className="p-6 sm:p-10 space-y-8" style={{ borderTop: `8px solid ${accentColor}` }}>
-        <div className="space-y-2">
+        {!sent ? <div className="space-y-2">
           <h1 className="break-words text-3xl sm:text-4xl font-serif font-bold" style={{ color: themeColor }}>{form.title}</h1>
           {form.description ? <p className="text-stone-600">{form.description}</p> : null}
-        </div>
+        </div> : null}
         {sent ? (
           assignmentResult ? (
             <div className="space-y-6 text-center">
-              <h2 className="text-2xl font-bold" style={{ color: themeColor }}>Registration complete</h2>
-              <p className="text-stone-600">Your color decides your group. Here comes your draw.</p>
-              <div className="relative mx-auto aspect-square w-72 max-w-full">
-                <div className="absolute -top-2 left-1/2 z-10 -translate-x-1/2 border-x-[14px] border-t-[26px] border-x-transparent" style={{ borderTopColor: themeColor }} />
-                <div className="h-full w-full rounded-full border-4 border-white shadow-lg transition-transform duration-[4200ms] ease-[cubic-bezier(.12,.72,.12,1)]" style={{ background: `conic-gradient(${(form.style?.color_assignment as FormColorAssignment).colors.map((color, i, colors) => `${color.hex} ${i * 100 / colors.length}% ${(i + 1) * 100 / colors.length}%`).join(', ')})`, transform: `rotate(${wheelRotation}deg)` }} />
-                <div className="absolute inset-0 grid place-items-center"><div className="grid h-20 w-20 place-items-center rounded-full border-4 border-white bg-white text-xs font-black uppercase text-stone-600 shadow">Your<br />group</div></div>
-              </div>
-              <div className="space-y-2 border border-stone-200 p-5" style={{ backgroundColor: `${assignmentResult.assigned_color_hex}20` }}>
-                <p className="text-sm font-bold uppercase tracking-widest text-stone-600">Your assigned color</p>
-                <p className="text-3xl font-black" style={{ color: assignmentResult.assigned_color_hex }}>{assignmentResult.assigned_color}</p>
-                <p className="text-sm text-stone-600">Group {assignmentResult.group_size} of {((form.style?.color_assignment as FormColorAssignment).capacity_per_color)}.</p>
-                {assignmentResult.assigned_group_url ? <a href={assignmentResult.assigned_group_url} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center justify-center bg-primary px-5 py-3 font-bold text-white">Join {assignmentResult.assigned_color} group</a> : <p className="text-sm text-stone-600">Join your {assignmentResult.assigned_color} group with your event coordinator.</p>}
-              </div>
+              {form.style?.completion_greeting ? <h2 className="text-2xl font-bold" style={{ color: themeColor }}>{form.style.completion_greeting}</h2> : null}
+              {assignmentResult.assigned_group_url ? <a href={assignmentResult.assigned_group_url} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center bg-primary px-5 py-3 font-bold text-white">{colorAssignment?.colors.find((color) => color.name === assignmentResult.assigned_color)?.group_link_label || assignmentResult.assigned_group_url}</a> : null}
             </div>
           ) : (
-            <div className="border p-6 font-bold" style={{ borderColor: accentColor, backgroundColor: `${accentColor}1a`, color: themeColor }}>Submitted.</div>
+            <div className="space-y-4 text-center">
+              {form.style?.completion_greeting ? <h2 className="text-2xl font-bold" style={{ color: themeColor }}>{form.style.completion_greeting}</h2> : null}
+            </div>
           )
         ) : (
-          <form onSubmit={submit} className="space-y-5">
+          <form id="custom-form" onSubmit={submit} className="space-y-5">
             {form.fields.filter((field) => !field.showWhen || values[field.showWhen.fieldId] === field.showWhen.equals).map((field) => (
               <div key={field.id} className="space-y-2">
                 <label className="text-sm font-bold text-stone-700">
@@ -141,11 +158,30 @@ export default function FormPage() {
                 )}
               </div>
             ))}
-            <button className="min-h-12 w-full py-3 font-bold uppercase tracking-widest text-white sm:py-4" style={{ backgroundColor: themeColor }}>Submit</button>
+            <button disabled={spinning} className="min-h-12 w-full py-3 font-bold uppercase tracking-widest text-white disabled:cursor-not-allowed disabled:opacity-50 sm:py-4" style={{ backgroundColor: themeColor }}>{colorAssignment?.enabled && !spunColor ? 'Continue' : 'Submit'}</button>
           </form>
         )}
         </div>
       </div>
+      {colorAssignment?.enabled && wheelOpen ? (
+        <div className="fixed inset-0 z-[100] grid place-items-center bg-stone-950/60 p-4 backdrop-blur-md" role="dialog" aria-modal="true" aria-label="Color wheel">
+          <div className="relative w-full max-w-2xl overflow-hidden border-4 border-white bg-gradient-to-br from-white via-amber-50 to-rose-50 p-6 text-center shadow-2xl sm:p-10">
+            {Array.from({ length: 18 }).map((_, index) => (
+              <span key={index} aria-hidden="true" className="absolute h-3 w-2 animate-bounce" style={{ left: `${4 + (index * 31) % 92}%`, top: `${3 + (index * 17) % 80}%`, backgroundColor: colorAssignment.colors[index % colorAssignment.colors.length]?.hex || accentColor, animationDelay: `${(index % 6) * 120}ms`, transform: `rotate(${index * 37}deg)` }} />
+            ))}
+            <button type="button" onClick={() => !spinning && setWheelOpen(false)} disabled={spinning} className="absolute right-3 top-3 h-9 w-9 rounded-full bg-white text-lg font-black text-stone-600 shadow disabled:opacity-40" aria-label="Close color wheel">×</button>
+            <p className="relative text-xs font-black uppercase tracking-[0.25em]" style={{ color: accentColor }}>Color crew reveal</p>
+            <h2 className="relative mt-2 font-serif text-3xl font-black sm:text-5xl" style={{ color: themeColor }}>{spinning ? 'Hold tight…' : spunColor ? 'You got it! 🎉' : 'Spin for your crew!'}</h2>
+            <p className="relative mt-3 text-sm font-semibold text-stone-600">{spinning ? 'Your color is landing now.' : spunColor ? `${spunColor.name} squad awaits you!` : 'Tap giant wheel. Let fate pick your color.'}</p>
+            <button type="button" onClick={spinWheel} disabled={spinning} title="Spin for your color" className="group relative mx-auto mt-8 block aspect-square w-[min(78vw,30rem)] max-w-full rounded-full disabled:cursor-wait" aria-label="Spin for your color">
+              <span className="absolute -top-3 left-1/2 z-10 -translate-x-1/2 border-x-[20px] border-t-[34px] border-x-transparent drop-shadow" style={{ borderTopColor: themeColor }} />
+              <span className="block h-full w-full rounded-full border-8 border-white shadow-2xl transition-transform duration-[4200ms] ease-[cubic-bezier(.12,.72,.12,1)]" style={{ background: `conic-gradient(${colorAssignment.colors.map((color, i, colors) => `${color.hex} ${i * 100 / colors.length}% ${(i + 1) * 100 / colors.length}%`).join(', ')})`, transform: `rotate(${wheelRotation}deg)` }} />
+              <span className="absolute inset-0 grid place-items-center"><span className="grid h-28 w-28 place-items-center rounded-full border-4 border-white bg-white px-3 text-sm font-black uppercase text-stone-700 shadow-lg sm:h-36 sm:w-36">{spinning ? 'Spinning…' : spunColor ? spunColor.name : 'Tap\nto spin'}</span></span>
+            </button>
+            {spunColor && !spinning ? <div className="relative mt-7"><p className="text-2xl font-black sm:text-3xl" style={{ color: spunColor.hex }}>✨ {spunColor.name.toUpperCase()} SQUAD! ✨</p></div> : <p className="relative mt-6 text-xs font-bold uppercase tracking-widest text-stone-500">{spinning ? 'No peeking…' : 'One spin gives your color'}</p>}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

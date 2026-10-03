@@ -150,7 +150,7 @@ export default function Login() {
             <div className="space-y-2">
               <div className="flex justify-between items-center ml-1">
                 <label className="text-sm font-medium text-stone-700">Password</label>
-                <button type="button" className="text-xs text-accent hover:underline font-medium">Forgot password?</button>
+                <Link to="/forgot-password" className="text-xs text-accent hover:underline font-medium">Forgot password?</Link>
               </div>
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 w-5 h-5" />

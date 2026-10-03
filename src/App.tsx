@@ -41,6 +41,7 @@ const Playlists = lazy(() => import('./pages/Playlists'));
 const PlaylistDetail = lazy(() => import('./pages/PlaylistDetail'));
 const FormPage = lazy(() => import('./pages/FormPage'));
 const AdminForms = lazy(() => import('./pages/Admin/Forms'));
+const AdminFormResponses = lazy(() => import('./pages/Admin/FormResponses'));
 const Newcomers = lazy(() => import('./pages/Newcomers'));
 const AdminNewcomers = lazy(() => import('./pages/Admin/Newcomers'));
 const AdminNewcomerResponses = lazy(() => import('./pages/Admin/NewcomerResponses'));
@@ -111,6 +112,7 @@ export default function App() {
               <Route path="events" element={<AdminEvents />} />
               <Route path="testimonials" element={<AdminTestimonials />} />
               <Route path="forms" element={<AdminForms />} />
+              <Route path="forms/responses" element={<AdminFormResponses />} />
               <Route path="newcomers" element={<AdminNewcomers />} />
               <Route path="newcomers/responses" element={<AdminNewcomerResponses />} />
               <Route path="users" element={<AdminUsers />} />

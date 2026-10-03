@@ -12,6 +12,7 @@ import {
   Plus,
   Save,
   Trash2,
+  Undo2,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -50,6 +51,11 @@ type BuilderSection = {
   };
 };
 
+type BuilderHistoryEntry = {
+  sections: BuilderSection[];
+  status: 'draft' | 'published';
+};
+
 function createSection(template: Omit<BuilderSection, 'id'>): BuilderSection {
   return { ...template, id: `${template.type}-${crypto.randomUUID()}`, settings: { ...template.settings } };
 }
@@ -80,6 +86,20 @@ export default function PageBuilder() {
   const [saving, setSaving] = useState(false);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [sectionHistory, setSectionHistory] = useState<BuilderHistoryEntry[]>([]);
+
+  const rememberSections = () => {
+    setSectionHistory((current) => [...current.slice(-49), { sections: JSON.parse(JSON.stringify(sections)) as BuilderSection[], status }]);
+  };
+
+  const undoSectionChange = () => {
+    const previous = sectionHistory[sectionHistory.length - 1];
+    if (!previous) return;
+    setSections(previous.sections);
+    setSelectedId(previous.sections[0]?.id || '');
+    setStatus(previous.status);
+    setSectionHistory((current) => current.slice(0, -1));
+  };
 
   useEffect(() => {
     const loadBuilder = async () => {
@@ -115,6 +135,7 @@ export default function PageBuilder() {
   );
 
   const moveSection = (id: string, direction: -1 | 1) => {
+    rememberSections();
     setSections((current) => {
       const index = current.findIndex((section) => section.id === id);
       const nextIndex = index + direction;
@@ -127,6 +148,7 @@ export default function PageBuilder() {
 
   const dropOn = (targetId: string) => {
     if (!draggedId || draggedId === targetId) return;
+    rememberSections();
     setSections((current) => {
       const dragged = current.find((section) => section.id === draggedId);
       if (!dragged) return current;
@@ -140,6 +162,7 @@ export default function PageBuilder() {
 
   const updateSelected = (patch: Partial<BuilderSection>) => {
     if (!selectedSection) return;
+    rememberSections();
     setSections((current) =>
       current.map((section) => (section.id === selectedSection.id ? { ...section, ...patch } : section)),
     );
@@ -155,6 +178,7 @@ export default function PageBuilder() {
   };
 
   const addCustomSection = () => {
+    rememberSections();
     const section = createSection({
       type: 'custom',
       label: 'Custom Section',
@@ -181,24 +205,16 @@ export default function PageBuilder() {
   const removeSection = (section: BuilderSection) => {
     if (!window.confirm(`Delete \"${section.label}\" block?`)) return;
 
+    rememberSections();
     const index = sections.findIndex((item) => item.id === section.id);
     const nextSections = sections.filter((item) => item.id !== section.id);
     setSections(nextSections);
     setSelectedId(nextSections[index]?.id || nextSections[index - 1]?.id || '');
-    if (nextSections.length === 0) {
-      supabase.from('page_builder_pages').delete().eq('page_slug', 'home').then(({ error }) => {
-        if (error) console.error('Builder page delete error:', error);
-      });
-    }
   };
 
-  const deleteBuilderPage = async () => {
-    if (!window.confirm('Delete the builder page and all of its blocks?')) return;
-    const { error } = await supabase.from('page_builder_pages').delete().eq('page_slug', 'home');
-    if (error) {
-      alert('Failed to delete builder page.');
-      return;
-    }
+  const deleteBuilderPage = () => {
+    if (!window.confirm('Clear all blocks? You can Undo before saving.')) return;
+    rememberSections();
     setSections([]);
     setSelectedId('');
     setStatus('draft');
@@ -267,6 +283,9 @@ export default function PageBuilder() {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           {savedAt ? <span className="text-xs font-bold uppercase tracking-widest text-emerald-700">Saved {savedAt}</span> : null}
+          <button type="button" onClick={undoSectionChange} disabled={saving || sectionHistory.length === 0} className="inline-flex items-center gap-2 border border-stone-300 px-4 py-3 text-xs font-bold uppercase tracking-widest text-stone-700 disabled:opacity-40" title="Undo last builder change">
+            <Undo2 className="h-4 w-4" /> Undo
+          </button>
           <button type="button" onClick={() => saveBuilder('draft')} disabled={saving} className="inline-flex items-center gap-2 border border-primary px-4 py-3 text-xs font-bold uppercase tracking-widest text-primary disabled:opacity-60">
             <Save className="h-4 w-4" /> Save Draft
           </button>
@@ -275,7 +294,7 @@ export default function PageBuilder() {
             Publish
           </button>
           <button type="button" onClick={deleteBuilderPage} disabled={saving || sections.length === 0} className="inline-flex items-center gap-2 border border-rose-200 px-4 py-3 text-xs font-bold uppercase tracking-widest text-rose-700 disabled:opacity-40">
-            <Trash2 className="h-4 w-4" /> Delete Page
+            <Trash2 className="h-4 w-4" /> Clear Page
           </button>
         </div>
       </div>

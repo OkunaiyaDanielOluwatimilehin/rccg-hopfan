@@ -12,17 +12,19 @@ export default function ForgotPassword() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) return;
     setLoading(true);
     setError(null);
     setMessage(null);
     const redirectTo = `${window.location.origin}/reset-password`;
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalizedEmail, { redirectTo });
     setLoading(false);
     if (resetError) {
       setError(resetError.message || 'Could not send reset link.');
       return;
     }
-    setMessage('Reset link sent. Check your email.');
+    setMessage('If an account uses this email, reset instructions have been sent. Check inbox and spam folder.');
   }
 
   return (

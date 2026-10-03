@@ -59,6 +59,7 @@ export default function AdminDashboard() {
     { name: 'Events', path: '/admin/events', icon: CalendarDays, section: 'events' as const },
     { name: 'Testimonials', path: '/admin/testimonials', icon: MessageSquare, section: 'testimonials' as const },
     { name: 'Forms', path: '/admin/forms', icon: ListChecks, section: 'forms' as const },
+    { name: 'Form Responses', path: '/admin/forms/responses', icon: ClipboardList, section: 'forms' as const },
     { name: 'Newcomer Form', path: '/admin/newcomers', icon: ClipboardList, section: 'newcomers' as const },
     { name: 'Newcomer Responses', path: '/admin/newcomers/responses', icon: ListChecks, section: 'newcomers' as const },
   ];

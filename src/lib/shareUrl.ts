@@ -1,4 +1,4 @@
-export type ShareContentType = 'event' | 'article' | 'sermon' | 'devotional';
+export type ShareContentType = 'event' | 'article' | 'sermon' | 'devotional' | 'form';
 
 export function slugifyShareTitle(value: string) {
   return value
@@ -24,5 +24,5 @@ export function buildShareUrl(type: ShareContentType, title: string, id: string,
   const origin = typeof window === 'undefined' ? '' : window.location.origin;
   const version = imageVersion(imageUrl);
   const query = version ? `?v=${version}` : '';
-  return `${origin}/${type}/${slugifyShareTitle(slug || title)}--${encodeURIComponent(id)}${query}`;
+  return `${origin}/api/share/${type}/${slugifyShareTitle(slug || title)}--${encodeURIComponent(id)}${query}`;
 }
