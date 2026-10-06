@@ -18,6 +18,7 @@ export default function FormPage() {
   const [spunColor, setSpunColor] = useState<FormColorAssignment['colors'][number] | null>(null);
   const [spinning, setSpinning] = useState(false);
   const [wheelOpen, setWheelOpen] = useState(false);
+  const [latestContent, setLatestContent] = useState<Array<{ title: string; subtitle: string; href: string; image?: string }>>([]);
 
   useEffect(() => {
     if (!slug || (preview && authLoading)) return;
@@ -32,6 +33,26 @@ export default function FormPage() {
       setLoading(false);
     });
   }, [slug, preview, authLoading]);
+
+  useEffect(() => {
+    if (!sent) return;
+    const loadLatestContent = async () => {
+      const [postsRes, sermonsRes, devotionalsRes, eventsRes] = await Promise.all([
+        supabase.from('posts').select('id,title,summary,image_url,published_at,slug').eq('status', 'published').order('published_at', { ascending: false }).limit(2),
+        supabase.from('sermons').select('id,title,description,thumbnail_url,published_at').eq('status', 'published').order('published_at', { ascending: false }).limit(2),
+        supabase.from('devotionals').select('id,title,content,image_url,published_at,devotional_date').eq('status', 'published').order('published_at', { ascending: false }).limit(2),
+        supabase.from('events').select('id,title,description,image_url,published_at').eq('status', 'published').order('published_at', { ascending: false }).limit(2),
+      ]);
+      const items = [
+        ...(postsRes.data || []).map((item: any) => ({ title: item.title, subtitle: item.summary || 'Latest church update', href: `/editorial/${item.slug || item.id}`, image: item.image_url || undefined })),
+        ...(sermonsRes.data || []).map((item: any) => ({ title: item.title, subtitle: item.description || 'Latest sermon', href: `/sermons/${item.id}`, image: item.thumbnail_url || undefined })),
+        ...(devotionalsRes.data || []).map((item: any) => ({ title: item.title, subtitle: item.content || 'Daily devotional', href: `/devotionals?date=${encodeURIComponent(item.devotional_date || item.published_at || '')}`, image: item.image_url || undefined })),
+        ...(eventsRes.data || []).map((item: any) => ({ title: item.title, subtitle: item.description || 'Upcoming event', href: `/events/${item.id}`, image: item.image_url || undefined })),
+      ].slice(0, 4);
+      setLatestContent(items);
+    };
+    loadLatestContent();
+  }, [sent]);
 
   function spinWheel() {
     const colors = (form?.style?.color_assignment as FormColorAssignment | undefined)?.colors || [];
@@ -114,10 +135,46 @@ export default function FormPage() {
             <div className="space-y-6 text-center">
               {form.style?.completion_greeting ? <h2 className="text-2xl font-bold" style={{ color: themeColor }}>{form.style.completion_greeting}</h2> : null}
               {assignmentResult.assigned_group_url ? <a href={assignmentResult.assigned_group_url} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center bg-primary px-5 py-3 font-bold text-white">{colorAssignment?.colors.find((color) => color.name === assignmentResult.assigned_color)?.group_link_label || assignmentResult.assigned_group_url}</a> : null}
+              <div className="mt-8 rounded-2xl border border-stone-200 bg-stone-50 p-5 text-left">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <h3 className="text-xl font-bold text-stone-900">Latest from RCCG HOPFAN</h3>
+                  <a href="/" className="text-sm font-bold text-primary">Back to home</a>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {latestContent.map((item) => (
+                    <a key={`${item.title}-${item.href}`} href={item.href} className="block overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+                      {item.image ? <img src={item.image} alt={item.title} className="h-28 w-full object-cover" referrerPolicy="no-referrer" /> : null}
+                      <div className="space-y-2 p-4">
+                        <p className="text-xs font-bold uppercase tracking-widest text-stone-500">Latest update</p>
+                        <h4 className="font-bold text-stone-900">{item.title}</h4>
+                        <p className="text-sm text-stone-600">{item.subtitle}</p>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </div>
             </div>
           ) : (
-            <div className="space-y-4 text-center">
+            <div className="space-y-6 text-center">
               {form.style?.completion_greeting ? <h2 className="text-2xl font-bold" style={{ color: themeColor }}>{form.style.completion_greeting}</h2> : null}
+              <div className="mt-8 rounded-2xl border border-stone-200 bg-stone-50 p-5 text-left">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <h3 className="text-xl font-bold text-stone-900">Latest from RCCG HOPFAN</h3>
+                  <a href="/" className="text-sm font-bold text-primary">Back to home</a>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {latestContent.map((item) => (
+                    <a key={`${item.title}-${item.href}`} href={item.href} className="block overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+                      {item.image ? <img src={item.image} alt={item.title} className="h-28 w-full object-cover" referrerPolicy="no-referrer" /> : null}
+                      <div className="space-y-2 p-4">
+                        <p className="text-xs font-bold uppercase tracking-widest text-stone-500">Latest update</p>
+                        <h4 className="font-bold text-stone-900">{item.title}</h4>
+                        <p className="text-sm text-stone-600">{item.subtitle}</p>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </div>
             </div>
           )
         ) : (

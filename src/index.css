@@ -79,23 +79,90 @@ body {
     }
   }
 
+  .admin-sidebar {
+    scroll-behavior: smooth;
+  }
+
+  .admin-sidebar-logo-badge {
+    flex-shrink: 0;
+    object-fit: contain;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+
+  .admin-sidebar-logo-badge img {
+    border-radius: 0 !important;
+  }
+
+  .admin-sidebar-profile {
+    min-height: 4.5rem;
+  }
+
+  .admin-sidebar-user-meta {
+    max-width: 10rem;
+  }
+
+  .admin-sidebar-collapsed {
+    width: 5.5rem !important;
+  }
+
   .admin-sidebar-collapsed .admin-sidebar-text,
-  .admin-sidebar-collapsed .admin-sidebar-group-label {
+  .admin-sidebar-collapsed .admin-sidebar-group-label,
+  .admin-sidebar-collapsed .admin-sidebar-user-meta,
+  .admin-sidebar-collapsed .admin-sidebar-header a > span,
+  .admin-sidebar-collapsed .admin-sidebar-profile > div > div:last-child {
     display: none !important;
   }
 
   .admin-sidebar-collapsed nav {
-    padding-left: 0.75rem;
-    padding-right: 0.75rem;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
   }
 
   .admin-sidebar-collapsed a,
   .admin-sidebar-collapsed button {
-    justify-content: center;
+    justify-content: center !important;
+    min-width: 0;
+    gap: 0 !important;
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+    width: 100%;
   }
 
-  .admin-sidebar-collapsed .admin-sidebar-text + svg,
-  .admin-sidebar-collapsed a > span:last-child {
-    display: none;
+  .admin-sidebar-collapsed a > div,
+  .admin-sidebar-collapsed button > div {
+    width: auto !important;
+    justify-content: center !important;
+    gap: 0 !important;
+  }
+
+  .admin-sidebar-collapsed a > span:last-child,
+  .admin-sidebar-collapsed button > span:last-child,
+  .admin-sidebar-collapsed .admin-sidebar-text + svg {
+    display: none !important;
+  }
+
+  .admin-sidebar-collapsed .admin-sidebar-header {
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+  }
+
+  .admin-sidebar-collapsed .admin-sidebar-profile {
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+  }
+
+  @media (max-width: 767px) {
+    .admin-sidebar-collapsed {
+      width: 100% !important;
+    }
+
+    .admin-sidebar-collapsed a,
+    .admin-sidebar-collapsed button {
+      padding-left: 0.75rem !important;
+      padding-right: 0.75rem !important;
+    }
   }
 }

@@ -20,6 +20,32 @@ function imageVersion(imageUrl?: string) {
   return (hash >>> 0).toString(36);
 }
 
+export function resolveShareOrigin(headers?: Record<string, string | string[] | undefined>) {
+  const forwardedHost = String(headers?.['x-forwarded-host'] || headers?.host || '').split(',')[0].trim();
+  const host = forwardedHost || 'rccg-hopfan.vercel.app';
+  const forwardedProto = String(headers?.['x-forwarded-proto'] || headers?.protocol || '').split(',')[0].trim();
+  const protocol = forwardedProto || 'https';
+  const normalized = /^https?:\/\//i.test(protocol) ? protocol : `${protocol}://`;
+  try {
+    return new URL(normalized === 'https://' ? `https://${host}` : normalized.includes('://') ? `${normalized}${host}` : `${protocol}://${host}`).toString().replace(/\/$/, '');
+  } catch {
+    return 'https://rccg-hopfan.vercel.app';
+  }
+}
+
+export function toAbsoluteUrl(imageUrl: string | null | undefined, origin: string, version?: string) {
+  const fallback = new URL('/Rccg_logo.png', origin).toString();
+  if (!imageUrl) return fallback;
+  try {
+    const candidate = new URL(imageUrl, origin);
+    if (!['http:', 'https:'].includes(candidate.protocol)) return fallback;
+    if (version) candidate.searchParams.set('share', version);
+    return candidate.toString();
+  } catch {
+    return fallback;
+  }
+}
+
 export function buildShareUrl(type: ShareContentType, title: string, id: string, slug?: string, imageUrl?: string) {
   const origin = typeof window === 'undefined' ? '' : window.location.origin;
   const version = imageVersion(imageUrl);

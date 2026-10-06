@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Copy, Download, Eye, ListChecks, Loader2, Palette, Plus, Save, Share2, Trash2, Upload, X } from 'lucide-react';
+import { Copy, Download, Eye, ListChecks, Loader2, Palette, Plus, QrCode, Save, Share2, Trash2, Upload, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-import { CustomForm, CustomFormEntry, CustomFormField, CustomFormFieldType, FormColorAssignment } from '../../types';
+import { CustomForm, CustomFormEntry, CustomFormField, CustomFormFieldType, FormAssignmentColor, FormColorAssignment } from '../../types';
 import { uploadToSupabasePublicBucket } from '../../services/uploadService';
 import { buildShareUrl } from '../../lib/shareUrl';
+import { buildQrCodeUrl } from '../../lib/qr';
 
 const fieldTypes: CustomFormFieldType[] = ['short_text', 'long_text', 'email', 'phone', 'number', 'date', 'select', 'checkbox'];
 
@@ -19,7 +20,7 @@ const newField = (): CustomFormField => ({
   options: [],
 });
 
-const youthColors = [
+const youthColors: FormAssignmentColor[] = [
   { name: 'Brown', hex: '#8b5e3c', group_url: '' },
   { name: 'White', hex: '#f4f4f0', group_url: '' },
   { name: 'Green', hex: '#27864a', group_url: '' },
@@ -45,6 +46,7 @@ export default function AdminForms() {
   const [saving, setSaving] = useState(false);
   const [uploadingHeader, setUploadingHeader] = useState(false);
   const [sharedFormId, setSharedFormId] = useState<string | null>(null);
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
   const active = forms.find((form) => form.id === activeId) || null;
 
   useEffect(() => {
@@ -152,6 +154,37 @@ export default function AdminForms() {
     }
   }
 
+  function generateQrCode(form: CustomForm) {
+    if (!form || form.status !== 'published') {
+      alert('Publish form before generating a QR code.');
+      return;
+    }
+    const shareUrl = buildShareUrl('form', form.title, form.id, form.slug, form.header_image_url || undefined);
+    setQrUrl(buildQrCodeUrl(shareUrl));
+  }
+
+  async function downloadQrCode() {
+    if (!qrUrl || !active) return;
+
+    try {
+      const response = await fetch(qrUrl);
+      if (!response.ok) throw new Error('QR image fetch failed');
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = `${slugify(active.title || 'form')}-qr-code.png`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (error) {
+      console.error('QR code download failed:', error);
+      window.open(qrUrl, '_blank', 'noopener,noreferrer');
+    }
+  }
+
   async function addForm() {
     const row = {
       title: 'Newcomer Form',
@@ -202,7 +235,7 @@ export default function AdminForms() {
     patchActive({ style: { ...active.style, color_assignment: { ...current, ...patch } } });
   }
 
-  function patchAssignmentColor(index: number, patch: Partial<(typeof youthColors)[number]>) {
+  function patchAssignmentColor(index: number, patch: Partial<FormAssignmentColor>) {
     const assignment = (active?.style?.color_assignment || {}) as FormColorAssignment;
     patchColorAssignment({ colors: (assignment.colors || youthColors).map((color, i) => i === index ? { ...color, ...patch } : color) });
   }
@@ -303,7 +336,7 @@ export default function AdminForms() {
           {forms.map((form) => (
             <button
               key={form.id}
-              onClick={() => { setActiveId(form.id); setActiveEntriesPage(1); }}
+              onClick={() => setActiveId(form.id)}
               className={`w-full border p-4 text-left ${active?.id === form.id ? 'border-primary bg-primary/5' : 'border-stone-200 bg-white'}`}
             >
               <p className="font-bold text-primary">{form.title}</p>
@@ -325,6 +358,9 @@ export default function AdminForms() {
                 <button onClick={() => shareForm(active)} className="inline-flex items-center gap-2 rounded-lg border border-stone-200 px-4 py-2 text-sm font-bold text-stone-700" title={active.status === 'published' ? 'Share form' : 'Publish form before sharing'}>
                   {sharedFormId === active.id ? <Copy className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
                   {sharedFormId === active.id ? 'Copied' : 'Share'}
+                </button>
+                <button onClick={() => generateQrCode(active)} className="inline-flex items-center gap-2 rounded-lg border border-stone-200 px-4 py-2 text-sm font-bold text-stone-700">
+                  <QrCode className="h-4 w-4" /> QR Code
                 </button>
                 <button onClick={exportEntries} className="inline-flex items-center gap-2 rounded-lg border border-stone-200 px-4 py-2 text-sm font-bold text-stone-700">
                   <Download className="h-4 w-4" /> Export
@@ -370,6 +406,29 @@ export default function AdminForms() {
                   ))}
                 </div>
               </section>
+            ) : null}
+
+            {qrUrl ? (
+              <div className="rounded-xl border border-stone-200 bg-stone-50 p-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-widest text-stone-500">Quick QR invite</p>
+                    <p className="text-sm text-stone-600">Scan to open the published form.</p>
+                  </div>
+                  <button type="button" onClick={() => setQrUrl(null)} className="text-sm font-bold text-stone-500">Close</button>
+                </div>
+                <div className="mt-4 flex flex-wrap items-center gap-4">
+                  <img src={qrUrl} alt={`QR code for ${active.title}`} className="h-32 w-32 rounded-lg border border-stone-200 bg-white p-2" />
+                  <div className="min-w-0 flex-1">
+                    <p className="break-all text-sm text-stone-700">{buildShareUrl('form', active.title, active.id, active.slug, active.header_image_url || undefined)}</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button type="button" onClick={downloadQrCode} className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-bold uppercase tracking-widest text-white">
+                        <Download className="h-4 w-4" /> Download QR
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             ) : null}
 
             <div className="border border-stone-200 bg-stone-50 p-4 space-y-4">

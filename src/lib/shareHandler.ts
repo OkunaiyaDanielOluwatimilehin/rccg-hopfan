@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { renderContentShareHtml, ShareContentType } from './contentShareHtml';
+import { resolveShareOrigin, toAbsoluteUrl } from './shareUrl';
 
 const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
 const supabaseKey = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '').trim();
@@ -36,9 +37,7 @@ export function createContentShareHandler(forcedType?: ShareContentType) {
 
     const title = String(row.title || '');
     if (!title) return res.status(404).send('Content not found.');
-    const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
-    const protocol = String(req.headers['x-forwarded-proto'] || req.protocol || (host.includes('localhost') ? 'http' : 'https')).split(',')[0].trim();
-    const origin = `${protocol}://${host}`;
+    const origin = resolveShareOrigin(req.headers);
     const destination = type === 'event'
       ? `/events/${encodeURIComponent(row.id)}`
       : type === 'article'
@@ -59,6 +58,6 @@ export function createContentShareHandler(forcedType?: ShareContentType) {
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120');
-    return res.status(200).send(renderContentShareHtml({ id: row.id, title, description, image, destination, type }, origin, sharePath, version));
+    return res.status(200).send(renderContentShareHtml({ id: row.id, title, description, image: toAbsoluteUrl(image, origin, version), destination, type }, origin, sharePath, version));
   };
 }
