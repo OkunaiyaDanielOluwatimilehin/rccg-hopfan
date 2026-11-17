@@ -1,3 +1,3 @@
-import { createContentShareHandler } from '../share/[type]/[key]';
+import { createContentShareHandler } from '../../src/lib/shareHandler';
 
 export default createContentShareHandler('article');
